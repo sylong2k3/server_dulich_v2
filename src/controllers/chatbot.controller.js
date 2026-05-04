@@ -1,0 +1,41 @@
+const asyncHandler = require('../helpers/async-handler');
+const { OK, CREATED } = require('../core/success.response');
+const ChatbotService = require('../services/chatbot.service');
+
+class ChatbotController {
+  // NV-50/51: Tạo phiên chat mới
+  static createSession = asyncHandler(async (req, res) => {
+    const result = await ChatbotService.createSession(req.user?.id || null, req.body);
+    return CREATED(res, 'Phiên chat được tạo', result);
+  });
+
+  // Danh sách phiên chat của user
+  static getSessions = asyncHandler(async (req, res) => {
+    const result = await ChatbotService.getUserSessions(req.user.id, req.query);
+    return OK(res, 'Danh sách phiên chat', result);
+  });
+
+  // Lấy tin nhắn trong phiên
+  static getMessages = asyncHandler(async (req, res) => {
+    const result = await ChatbotService.getMessages(req.params.sessionId, req.user?.id || null, req.query);
+    return OK(res, 'Tin nhắn trong phiên chat', result);
+  });
+
+  // NV-50/51: Gửi tin nhắn, nhận trả lời AI
+  static sendMessage = asyncHandler(async (req, res) => {
+    const result = await ChatbotService.sendMessage(
+      req.params.sessionId,
+      req.user?.id || null,
+      req.body.message
+    );
+    return OK(res, 'Tin nhắn đã được xử lý', result);
+  });
+
+  // Xóa phiên chat
+  static deleteSession = asyncHandler(async (req, res) => {
+    await ChatbotService.deleteSession(req.params.sessionId, req.user?.id || null);
+    return OK(res, 'Phiên chat đã được xóa');
+  });
+}
+
+module.exports = ChatbotController;

@@ -1,0 +1,61 @@
+{
+  "name": "server_ninhbinh",
+  "version": "1.0.0",
+  "description": "Ninh Binh Tourism API Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:cluster": "node cluster.js",
+    "dev": "nodemon server.js",
+    "dev:cluster": "nodemon cluster.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "daknong"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/earthengine": "^0.1.419",
+    "bcrypt": "^6.0.0",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.20",
+    "dotenv": "^17.2.2",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "express-list-endpoints": "^7.1.1",
+    "express-rate-limit": "^8.2.1",
+    "express-validator": "^7.2.1",
+    "file-type": "^21.3.0",
+    "geoip-lite": "^1.4.10",
+    "helmet": "^8.1.0",
+    "joi": "^18.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "node-cache": "^5.1.2",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.5",
+    "openai": "^6.34.0",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "pdfmake": "^0.3.7",
+    "pg": "^8.16.3",
+    "pg-copy-streams": "^6.0.6",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.34.5",
+    "speakeasy": "^2.0.0",
+    "stream-json": "^1.9.1",
+    "ua-parser-js": "^2.0.6",
+    "ws": "^8.18.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
