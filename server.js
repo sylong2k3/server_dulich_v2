@@ -7,8 +7,7 @@ const {
 } = require("./src/realtime/websocket.server");
 const TokenManager = require("./src/utils/tokenManager");
 const NotificationPushWorker = require("./src/services/notification-push.worker");
-const EmailVerificationRepository = require("./src/models/repositories/email-verification.repository");
-const VrHotspotRepository = require("./src/models/repositories/vr-hotspot.repository");
+const ScheduledReportService = require("./src/services/scheduled-report.service");
 require("dotenv").config();
 
 const PORT = process.env.PORT || 8881;
@@ -82,6 +81,7 @@ async function gracefulShutdown(signal) {
   if (IS_SINGLETON_WORKER) {
     TokenManager.stopCleanup();
     NotificationPushWorker.stop();
+    ScheduledReportService.stop();
   }
 
   if (server) {
@@ -136,6 +136,7 @@ const initializeAndStartServer = async () => {
     if (IS_SINGLETON_WORKER) {
       TokenManager.initializeCleanup();
       NotificationPushWorker.start();
+      ScheduledReportService.start();
     }
 
     // Xử lý Promise rejection không được bắt
