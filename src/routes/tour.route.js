@@ -1,17 +1,38 @@
 const express = require('express');
 const router = express.Router();
 const TourController = require('../controllers/tour.controller');
-const { authenticateToken, checkPermission, optionalAuth } = require('../middlewares/auth.middleware');
+const { authenticateToken, checkPermission, optionalAuth, requireRole } = require('../middlewares/auth.middleware');
 const { validateBody, validateParams, validateQuery } = require('../middlewares/validation');
 const {
     idParamSchema,
     stopIdParamSchema,
     tourQuerySchema,
+    tourAdminQuerySchema,
     createTourSchema,
     updateTourSchema,
     createStopSchema,
     updateStopSchema,
 } = require('../middlewares/validators/tour.validation');
+
+// ==================== ADMIN — phải đặt trước /:id để tránh conflict ====================
+// ROUTE: GET /admin - Danh sách tour cho admin (không cache, thấy cả draft/archived).
+router.get(
+  '/admin',
+  authenticateToken,
+  requireRole(['system_admin', 'ministry_manager', 'department_manager', 'travel_company']),
+  checkPermission('tours', 'read'),
+  validateQuery(tourAdminQuerySchema),
+  TourController.getAdminAll
+);
+// ROUTE: GET /admin/:id - Chi tiết tour cho admin (không cache).
+router.get(
+  '/admin/:id',
+  authenticateToken,
+  requireRole(['system_admin', 'ministry_manager', 'department_manager', 'travel_company']),
+  checkPermission('tours', 'read'),
+  validateParams(idParamSchema),
+  TourController.getAdminById
+);
 
 // ==================== PUBLIC ====================
 // ROUTE: GET / - Lấy toàn bộ danh sách cho quản trị tour du lịch. Xử lý bởi TourController.getAll. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.

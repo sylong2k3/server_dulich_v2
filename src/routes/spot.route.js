@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const SpotController = require('../controllers/spot.controller');
-const { authenticateToken, checkPermission, optionalAuth } = require('../middlewares/auth.middleware');
+const { authenticateToken, checkPermission, optionalAuth, requireRole } = require('../middlewares/auth.middleware');
 const upload = require('../middlewares/upload');
 const { validateBody, validateParams, validateQuery } = require('../middlewares/validation');
 const {
@@ -9,12 +9,15 @@ const {
   mediaParamSchema,
   slugParamSchema,
   spotQuerySchema,
+  spotAdminQuerySchema,
+  spotMapQuerySchema,
   nearbyQuerySchema,
   bboxQuerySchema,
   geojsonQuerySchema,
   featuredQuerySchema,
   mediaTypeQuerySchema,
   audioGuideQuerySchema,
+  spotDetailQuerySchema,
   createSpotSchema,
   updateSpotSchema,
   updateMediaMetaSchema,
@@ -25,6 +28,15 @@ const {
 // 2) Phân trang cho trang điểm du lịch: đủ dữ liệu để hiển thị card/list
 // ROUTE: GET / - Truy vấn điểm du lịch. Xử lý bởi SpotController.getAllSpots. Truy cập: cho phép đăng nhập tùy chọn.
 router.get('/', optionalAuth, validateQuery(spotQuerySchema), SpotController.getAllSpots);
+router.get(
+  '/admin',
+  authenticateToken,
+  requireRole(['system_admin', 'ministry_manager', 'department_manager', 'spot_operator', 'travel_company', 'service_provider']),
+  checkPermission('spots', 'read'),
+  validateQuery(spotAdminQuerySchema),
+  SpotController.getAdminSpots
+);
+router.get('/map', optionalAuth, validateQuery(spotMapQuerySchema), SpotController.getMapSpots);
 // ROUTE: GET /nearby - Tìm các mục ở gần vị trí người dùng điểm du lịch. Xử lý bởi SpotController.getNearbySpots. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.
 router.get('/nearby', validateQuery(nearbyQuerySchema), SpotController.getNearbySpots);
 // ROUTE: GET /bbox - Truy vấn điểm du lịch. Xử lý bởi SpotController.getSpotsByBbox. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.
@@ -37,7 +49,7 @@ router.get('/featured', validateQuery(featuredQuerySchema), SpotController.getFe
 // ==================== PROTECTED ROUTES ====================
 // 3) Phân trang cho trang quản trị: xem cả trạng thái draft/archived nếu cần
 // ROUTE: GET /:slug - Truy vấn điểm du lịch. Xử lý bởi SpotController.getSpotBySlug. Truy cập: cho phép đăng nhập tùy chọn.
-router.get('/:slug', optionalAuth, validateParams(slugParamSchema), SpotController.getSpotBySlug);
+router.get('/:slug', optionalAuth, validateParams(slugParamSchema), validateQuery(spotDetailQuerySchema), SpotController.getSpotBySlug);
 // ROUTE: GET /:id/media - Truy vấn điểm du lịch. Xử lý bởi SpotController.getSpotMedia. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.
 router.get('/:id/media', validateParams(idParamSchema), validateQuery(mediaTypeQuerySchema), SpotController.getSpotMedia);
 // ROUTE: GET /:id/audio-guide - Truy vấn điểm du lịch. Xử lý bởi SpotController.getAudioGuide. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.

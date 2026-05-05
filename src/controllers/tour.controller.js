@@ -10,13 +10,25 @@ class TourController {
         return OK(res, 'Danh sách tour', result);
     });
 
+    // ==================== ADMIN — không cache ====================
+
+    static getAdminAll = asyncHandler(async (req, res) => {
+        const result = await tourService.getAdminAll(req.query);
+        return OK(res, 'Danh sách tour (admin)', result);
+    });
+
+    static getAdminById = asyncHandler(async (req, res) => {
+        const tour = await tourService.getAdminById(req.params.id, req.query);
+        return OK(res, 'Chi tiết tour (admin)', { tour });
+    });
+
     static getById = asyncHandler(async (req, res) => {
-        const tour = await tourService.getById(req.params.id, { user: req.user });
+        const tour = await tourService.getById(req.params.id, { user: req.user }, req.query);
         return OK(res, 'Chi tiết tour', { tour });
     });
 
     static getBySlug = asyncHandler(async (req, res) => {
-        const tour = await tourService.getBySlug(req.params.slug, { user: req.user });
+        const tour = await tourService.getBySlug(req.params.slug, { user: req.user }, req.query);
         return OK(res, 'Chi tiết tour', { tour });
     });
 
@@ -38,7 +50,7 @@ class TourController {
     // ==================== STOPS ====================
 
     static getStops = asyncHandler(async (req, res) => {
-        const stops = await tourService.getStops(req.params.id);
+        const stops = await tourService.getStops(req.params.id, req.query);
         return OK(res, 'Danh sách điểm dừng', { stops });
     });
 

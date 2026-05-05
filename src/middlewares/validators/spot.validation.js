@@ -28,12 +28,8 @@ const slugParamSchema = Joi.object({
 
 // ── Query schemas ─────────────────────────────────────────────────────────────
 
-const spotQuerySchema = Joi.object({
-    ...paginationQuery({ defaultLimit: 20 }),
-    ...sortQuery(
-        ['created_at', 'name_vi', 'rating_avg', 'view_count'],
-        { defaultSortBy: 'created_at' }
-    ),
+const spotListQueryFields = {
+    lang: Joi.string().valid('vi', 'en').default('vi'),
     search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).optional(),
     category_ids: Joi.string()
         .custom((value, helpers) => {
@@ -51,14 +47,46 @@ const spotQuerySchema = Joi.object({
         })
         .optional(),
     province_code: provinceCodeField(),
-    district_id: Joi.number().integer().min(1).optional(),
     status: Joi.string().valid(...SPOT_STATUS).optional(),
     is_featured: Joi.boolean().optional(),
     rating_min: Joi.number().min(0).max(5).optional(),
     capacity: Joi.boolean().optional(),
+};
+
+const gpsQueryFields = {
+    lat: latField().optional(),
+    lng: lngField().optional(),
+    radius_km: Joi.number().min(0.1).max(100).optional(),
+};
+
+const spotQuerySchema = Joi.object({
+    ...paginationQuery({ defaultLimit: 20 }),
+    ...sortQuery(
+        ['created_at', 'name', 'name_vi', 'rating_avg', 'view_count', 'distance_m']
+    ),
+    ...spotListQueryFields,
+    ...gpsQueryFields,
+}).and('lat', 'lng');
+
+const spotAdminQuerySchema = Joi.object({
+    ...paginationQuery({ defaultLimit: 20 }),
+    ...sortQuery(
+        ['created_at', 'name', 'name_vi', 'rating_avg', 'view_count']
+    ),
+    ...spotListQueryFields,
 });
 
+const spotMapQuerySchema = Joi.object({
+    ...paginationQuery({ defaultLimit: 500, maxLimit: 1000 }),
+    ...sortQuery(
+        ['created_at', 'name', 'name_vi', 'rating_avg', 'view_count', 'distance_m']
+    ),
+    ...spotListQueryFields,
+    ...gpsQueryFields,
+}).and('lat', 'lng');
+
 const nearbyQuerySchema = Joi.object({
+    lang: Joi.string().valid('vi', 'en').default('vi'),
     lat: latField({ required: true }),
     lng: lngField({ required: true }),
     radius_km: Joi.number().min(0.1).max(100).default(10),
@@ -66,16 +94,19 @@ const nearbyQuerySchema = Joi.object({
 });
 
 const bboxQuerySchema = Joi.object({
+    lang: Joi.string().valid('vi', 'en').default('vi'),
     bbox: Joi.string().trim().required(),
     limit: Joi.number().integer().min(1).max(1000).default(500),
 });
 
 const geojsonQuerySchema = Joi.object({
+    lang: Joi.string().valid('vi', 'en').default('vi'),
     category_id: Joi.number().integer().min(1).optional(),
     province_code: provinceCodeField(),
 });
 
 const featuredQuerySchema = Joi.object({
+    lang: Joi.string().valid('vi', 'en').default('vi'),
     limit: Joi.number().integer().min(1).max(50).default(12),
     category_ids: Joi.string()
         .custom((value, helpers) => {
@@ -100,6 +131,10 @@ const mediaTypeQuerySchema = Joi.object({
 
 const audioGuideQuerySchema = Joi.object({
     language: Joi.string().trim().max(10).optional(),
+});
+
+const spotDetailQuerySchema = Joi.object({
+    lang: Joi.string().valid('vi', 'en').default('vi'),
 });
 
 // ── Body schemas (shared base fields) ─────────────────────────────────────────
@@ -164,12 +199,15 @@ module.exports = {
     mediaParamSchema,
     slugParamSchema,
     spotQuerySchema,
+    spotAdminQuerySchema,
+    spotMapQuerySchema,
     nearbyQuerySchema,
     bboxQuerySchema,
     geojsonQuerySchema,
     featuredQuerySchema,
     mediaTypeQuerySchema,
     audioGuideQuerySchema,
+    spotDetailQuerySchema,
     createSpotSchema,
     updateSpotSchema,
     updateMediaMetaSchema,

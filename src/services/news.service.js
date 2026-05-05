@@ -7,6 +7,27 @@ const NEWS_CACHE_TTL_SECONDS = 60;
 // Các role được chỉnh sửa bất kỳ bài viết nào (biên tập toàn hệ thống)
 const NEWS_BYPASS_ROLES = new Set(['system_admin', 'so_vhtt']);
 
+// ─── Batch view count ─────────────────────────────────────────────────────────
+// Thay vì gọi DB UPDATE mỗi lượt xem (hot path), gom vào buffer và flush mỗi 30s.
+// Tránh DB write storm trên bài viral.
+const viewCountBuffer = new Map(); // newsId (string) → delta count
+
+const flushViewCounts = async () => {
+  if (viewCountBuffer.size === 0) return;
+  // Lấy snapshot và xóa buffer ngay để không block
+  const snapshot = new Map(viewCountBuffer);
+  viewCountBuffer.clear();
+  for (const [newsId, delta] of snapshot) {
+    NewsRepository.batchIncrementViewCount(newsId, delta).catch((err) => {
+      console.error('[ViewCount] Flush error:', err.message);
+    });
+  }
+};
+
+// Flush mỗi 30s, không block process exit
+const viewFlushTimer = setInterval(flushViewCounts, 30_000);
+if (typeof viewFlushTimer.unref === 'function') viewFlushTimer.unref();
+
 const generateSlug = (title) =>
   title
     .toLowerCase()
@@ -23,11 +44,21 @@ class NewsService {
 
   static async getAll(query) {
     const { page = 1, limit = 10, search, is_featured, tag, sortBy, sortOrder } = query;
-    const cacheKey = `news:list:${JSON.stringify({ page, limit, search, is_featured, tag, sortBy, sortOrder })}`;
+    // Normalize cache key — chỉ dùng các filter ảnh hưởng đến kết quả
+    const cacheKey = [
+      'news:list',
+      `p${page}`,
+      `l${limit}`,
+      is_featured ?? '',
+      tag || '',
+      search || '',
+      sortBy || 'created_at',
+      sortOrder || 'DESC',
+    ].join(':');
     const { rows, total } = await cacheOrFetch(
       cacheKey,
       () => NewsRepository.findAll({
-      page, limit, search, is_published: true, is_featured, tag, sortBy, sortOrder,
+        page, limit, search, is_published: true, is_featured, tag, sortBy, sortOrder,
       }),
       NEWS_CACHE_TTL_SECONDS,
     );
@@ -78,7 +109,8 @@ class NewsService {
     const news = await NewsRepository.findBySlug(slug);
     if (!news) throw new Api404Error('Không tìm thấy tin tức');
     if (!news.is_published) throw new Api404Error('Không tìm thấy tin tức');
-    await NewsRepository.incrementViewCount(news.id);
+    // Batch view count — ghi vào buffer, flush mỗi 30s thay vì gọi DB mỗi request
+    viewCountBuffer.set(String(news.id), (viewCountBuffer.get(String(news.id)) || 0) + 1);
     return news;
   }
 

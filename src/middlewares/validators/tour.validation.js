@@ -33,6 +33,25 @@ const tourQuerySchema = Joi.object({
     duration_days: Joi.number().integer().min(1).optional(),
     price_min: Joi.number().min(0).optional(),
     price_max: Joi.number().min(0).optional(),
+    lang: Joi.string().valid('vi', 'en').optional(),
+});
+
+// Admin query — cho phép xem cả draft/archived, filter mở rộng hơn
+const tourAdminQuerySchema = Joi.object({
+    ...paginationQuery({ defaultLimit: 20, maxLimit: 100 }),
+    ...sortQuery(
+        ['created_at', 'price_from_vnd', 'duration_days', 'rating_avg', 'published_at', 'updated_at'],
+        { defaultSortBy: 'created_at', defaultSortOrder: 'DESC' }
+    ),
+    search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).optional(),
+    status: Joi.string().valid(...TOUR_STATUS).optional(),
+    province_code: provinceCodeField(),
+    business_id: uuid().optional(),
+    is_featured: Joi.boolean().optional(),
+    duration_days: Joi.number().integer().min(1).optional(),
+    price_min: Joi.number().min(0).optional(),
+    price_max: Joi.number().min(0).optional(),
+    lang: Joi.string().valid('vi', 'en').optional(),
 });
 
 // ── Tour body (shared base fields) ───────────────────────────────────────────
@@ -94,6 +113,7 @@ module.exports = {
     idParamSchema,
     stopIdParamSchema,
     tourQuerySchema,
+    tourAdminQuerySchema,
     createTourSchema,
     updateTourSchema,
     createStopSchema,

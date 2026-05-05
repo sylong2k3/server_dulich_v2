@@ -86,16 +86,10 @@ class VoucherService {
             if (lng == null || lat == null) {
                 throw new Api400Error('Vui lòng cung cấp vị trí để xác thực voucher địa lý');
             }
-            const { query } = require('../configs/database');
-            const { rows } = await query(
-                `SELECT ST_DWithin(
-                    ST_SetSRID(ST_MakePoint($1,$2),4326)::geography,
-                    $3::geography,
-                    $4
-                ) AS within`,
-                [lng, lat, voucher.geo_target_geom, voucher.geo_radius_m]
+            const within = await VoucherRepository.checkGeofence(
+                voucher.geo_target_geom, voucher.geo_radius_m, lng, lat,
             );
-            if (!rows[0]?.within) {
+            if (!within) {
                 throw new Api400Error('Bạn không trong phạm vi áp dụng voucher này');
             }
         }

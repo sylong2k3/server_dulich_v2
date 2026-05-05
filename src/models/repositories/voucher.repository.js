@@ -139,6 +139,19 @@ class VoucherRepository {
         );
         return rows[0] || null;
     }
+
+    // Kiểm tra geofence: trả true nếu toạ độ (lng, lat) nằm trong vùng geo của voucher
+    static async checkGeofence(geoTargetGeom, geoRadiusM, lng, lat) {
+        const { rows } = await query(
+            `SELECT ST_DWithin(
+                ST_SetSRID(ST_MakePoint($1,$2),4326)::geography,
+                $3::geography,
+                $4
+            ) AS within`,
+            [lng, lat, geoTargetGeom, geoRadiusM],
+        );
+        return rows[0]?.within === true;
+    }
 }
 
 module.exports = VoucherRepository;

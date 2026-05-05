@@ -10,13 +10,29 @@ const { LIMITS } = require('./common/constants');
 const festivalQuerySchema = Joi.object({
     ...paginationQuery({ defaultLimit: 12, maxLimit: 50 }),
     ...sortQuery(
-        ['name_vi', 'start_date', 'end_date', 'created_at'],
+        ['name_vi', 'name', 'start_date', 'end_date', 'created_at'],
         { defaultSortBy: 'start_date', defaultSortOrder: 'ASC' }
     ),
     search: Joi.string().trim().max(100).optional(),
     festival_type: Joi.string().trim().max(50).optional(),
     upcoming: Joi.boolean().optional(),
     is_published: Joi.boolean().optional(),
+    lang: Joi.string().valid('vi', 'en').optional(),
+});
+
+// Admin query — cho phép xem cả is_published=false
+const festivalAdminQuerySchema = Joi.object({
+    ...paginationQuery({ defaultLimit: 20, maxLimit: 100 }),
+    ...sortQuery(
+        ['name_vi', 'name', 'start_date', 'end_date', 'created_at', 'updated_at'],
+        { defaultSortBy: 'created_at', defaultSortOrder: 'DESC' }
+    ),
+    search: Joi.string().trim().max(100).optional(),
+    festival_type: Joi.string().trim().max(50).optional(),
+    upcoming: Joi.boolean().optional(),
+    is_published: Joi.boolean().optional(),
+    province_code: provinceCodeField(),
+    lang: Joi.string().valid('vi', 'en').optional(),
 });
 
 const calendarQuerySchema = Joi.object({
@@ -66,4 +82,4 @@ const updateFestivalSchema = Joi.object({
     recurrence_rule: Joi.string().trim().max(100).optional().allow('', null),
 }).min(1);
 
-module.exports = { festivalQuerySchema, calendarQuerySchema, createFestivalSchema, updateFestivalSchema };
+module.exports = { festivalQuerySchema, festivalAdminQuerySchema, calendarQuerySchema, createFestivalSchema, updateFestivalSchema };

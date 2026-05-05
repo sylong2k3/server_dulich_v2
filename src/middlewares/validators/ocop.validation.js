@@ -17,7 +17,22 @@ const ocopQuerySchema = Joi.object({
     category: Joi.string().trim().max(50).optional(),
     star_rating: Joi.number().integer().min(3).max(5).optional(),
     province_code: provinceCodeField(),
+    lang: Joi.string().valid('vi', 'en').optional(),
+});
+
+// Admin query — cho phép xem cả is_active=false, filter mở rộng
+const ocopAdminQuerySchema = Joi.object({
+    ...paginationQuery({ defaultLimit: 20, maxLimit: 100 }),
+    ...sortQuery(
+        ['name_vi', 'star_rating', 'price_vnd', 'created_at', 'updated_at'],
+        { defaultSortBy: 'created_at', defaultSortOrder: 'DESC' }
+    ),
+    search: Joi.string().trim().max(100).optional(),
+    category: Joi.string().trim().max(50).optional(),
+    star_rating: Joi.number().integer().min(3).max(5).optional(),
+    province_code: provinceCodeField(),
     is_active: Joi.boolean().optional(),
+    lang: Joi.string().valid('vi', 'en').optional(),
 });
 
 const ocopBaseFields = {
@@ -51,4 +66,4 @@ const createOcopSchema = Joi.object({
 
 const updateOcopSchema = Joi.object(ocopBaseFields).min(1);
 
-module.exports = { ocopQuerySchema, createOcopSchema, updateOcopSchema };
+module.exports = { ocopQuerySchema, ocopAdminQuerySchema, createOcopSchema, updateOcopSchema };

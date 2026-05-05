@@ -1,7 +1,9 @@
 const db = require('../../configs/database');
+const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
 class CulinaryRepository {
-    static async findAll({ page = 1, limit = 12, search, category, is_speciality, sortBy = 'created_at', sortOrder = 'DESC' }) {
+    static async findAll({ page = 1, limit = 12, search, category, is_speciality, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
+        const lang = normalizeLang(rawLang);
         const offset = (page - 1) * limit;
         const params = [];
         const conditions = [];
@@ -15,19 +17,31 @@ class CulinaryRepository {
             idx++;
         }
 
-        const allowed = ['name_vi', 'rating_avg', 'created_at'];
-        const col = allowed.includes(sortBy) ? sortBy : 'created_at';
-        const dir = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+        // Cho phép sort theo tên đã localize ('name')
+        const allowed = ['rating_avg', 'created_at'];
+        let orderClause;
+        if (sortBy === 'name' || sortBy === 'name_vi') {
+            orderClause = `${localizedValueSQL(lang, 'c.name_vi', 'c.name_en')} ${sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'}`;
+        } else {
+            const col = allowed.includes(sortBy) ? sortBy : 'created_at';
+            const dir = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+            orderClause = `c.${col} ${dir}`;
+        }
         const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
         const sql = `
-            SELECT c.id, c.name_vi, c.name_en, c.category, c.description_vi,
+            SELECT c.id,
+                   ${localizedSQL(lang, 'c.name_vi', 'c.name_en', 'name')},
+                   c.name_vi, c.name_en,
+                   c.category, c.description_vi,
                    c.cover_image_url, c.media_urls, c.is_speciality, c.rating_avg,
                    c.province_code, c.created_at,
+                   ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
                    COUNT(*) OVER() AS total_count
             FROM cuisine_items c
+            LEFT JOIN vn_units.provinces p ON c.province_code = p.code
             ${where}
-            ORDER BY c.${col} ${dir}
+            ORDER BY ${orderClause}
             LIMIT $${idx++} OFFSET $${idx++}
         `;
         params.push(limit, offset);
@@ -35,8 +49,17 @@ class CulinaryRepository {
         return { rows: result.rows, total: parseInt(result.rows[0]?.total_count || 0) };
     }
 
-    static async findById(id) {
-        const result = await db.query('SELECT * FROM cuisine_items WHERE id = $1', [id]);
+    static async findById(id, rawLang = 'vi') {
+        const lang = normalizeLang(rawLang);
+        const sql = `
+            SELECT c.*,
+                   ${localizedSQL(lang, 'c.name_vi', 'c.name_en', 'name')},
+                   ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')}
+            FROM cuisine_items c
+            LEFT JOIN vn_units.provinces p ON c.province_code = p.code
+            WHERE c.id = $1
+        `;
+        const result = await db.query(sql, [id]);
         return result.rows[0] || null;
     }
 

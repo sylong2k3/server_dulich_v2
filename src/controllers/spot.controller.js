@@ -10,15 +10,25 @@ class SpotController {
     return OK(res, 'Lấy danh sách điểm du lịch thành công', result);
   });
 
+  static getAdminSpots = asyncHandler(async (req, res) => {
+    const result = await spotService.getAdminSpots(req.query, { user: req.user });
+    return OK(res, 'Lấy danh sách điểm du lịch quản trị thành công', result);
+  });
+
+  static getMapSpots = asyncHandler(async (req, res) => {
+    const result = await spotService.getMapSpots(req.query, { user: req.user });
+    return OK(res, 'Lấy dữ liệu bản đồ điểm du lịch thành công', result);
+  });
+
   static getNearbySpots = asyncHandler(async (req, res) => {
-    const { lat, lng, radius_km, limit } = req.query;
-    const spots = await spotService.getNearbySpots(lat, lng, radius_km, limit);
+    const { lat, lng, radius_km, limit, lang } = req.query;
+    const spots = await spotService.getNearbySpots(lat, lng, radius_km, limit, lang);
     return OK(res, 'Tìm điểm du lịch lân cận thành công', { spots });
   });
 
   static getSpotsByBbox = asyncHandler(async (req, res) => {
-    const { bbox, limit } = req.query;
-    const spots = await spotService.getSpotsByBbox(bbox, limit);
+    const { bbox, limit, lang } = req.query;
+    const spots = await spotService.getSpotsByBbox(bbox, limit, lang);
     return OK(res, 'Lấy điểm du lịch trong vùng thành công', { spots });
   });
 
@@ -28,13 +38,13 @@ class SpotController {
   });
 
   static getFeaturedSpots = asyncHandler(async (req, res) => {
-    const { limit, category_ids } = req.query;
-    const spots = await spotService.getFeaturedSpots(limit, category_ids);
+    const { limit, category_ids, lang } = req.query;
+    const spots = await spotService.getFeaturedSpots(limit, category_ids, lang);
     return OK(res, 'Lấy danh sách điểm nổi bật thành công', { spots });
   });
 
   static getSpotBySlug = asyncHandler(async (req, res) => {
-    const spot = await spotService.getSpotBySlug(req.params.slug, { user: req.user });
+    const spot = await spotService.getSpotBySlug(req.params.slug, { user: req.user }, { lang: req.query.lang });
     return OK(res, 'Lấy thông tin điểm du lịch thành công', { spot });
   });
 

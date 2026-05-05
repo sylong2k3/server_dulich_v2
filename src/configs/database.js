@@ -38,16 +38,19 @@ const query = async (text, params) => {
         const duration = Date.now() - start;
 
         if (duration > SLOW_QUERY_THRESHOLD_MS) {
+            // Regex chỉ chạy khi query chậm — tránh tốn CPU trên hot path
+            const shortSql = text.replace(/\s+/g, ' ').substring(0, 200);
             console.warn(
-                `[SLOW QUERY] ${duration}ms | rows=${res.rowCount} | ${text.replace(/\s+/g, ' ').substring(0, 200)}`
+                `[SLOW QUERY] ${duration}ms | rows=${res.rowCount} | ${shortSql}`
             );
         }
 
         return res;
     } catch (err) {
         const duration = Date.now() - start;
+        const shortSql = text.replace(/\s+/g, ' ').substring(0, 150);
         console.error(
-            `[DB ERROR] ${duration}ms | ${err.message} | ${text.replace(/\s+/g, ' ').substring(0, 150)}`
+            `[DB ERROR] ${duration}ms | ${err.message} | ${shortSql}`
         );
         throw err;
     }

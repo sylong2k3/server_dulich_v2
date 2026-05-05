@@ -117,7 +117,15 @@
       "Bash(node tmp_perf_test.js)",
       "Bash(node tmp_attach_test.js)",
       "Bash(node tmp_n8n_test.js)",
-      "Bash(node tmp_prompt_test.js)"
+      "Bash(node tmp_prompt_test.js)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\('OPENAI_API_KEY loaded:', !!process.env.OPENAI_API_KEY\\); console.log\\('First 10 chars:', \\(process.env.OPENAI_API_KEY||''\\).slice\\(0,10\\)\\); console.log\\('DB:', process.env.DB_HOST, process.env.DB_NAME\\);\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const {pool} = require\\('./src/configs/database'\\); pool.query\\('SELECT 1 as ok'\\).then\\(r => { console.log\\('DB OK:', r.rows[0]\\); return pool.end\\(\\); }\\).catch\\(e => { console.error\\('DB FAIL:', e.message\\); process.exit\\(1\\); }\\);\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const {pool} = require\\('./src/configs/database'\\); pool.query\\(\\\\\"SELECT to_regclass\\('ai_chat_sessions'\\) as t1, to_regclass\\('ai_chat_messages'\\) as t2\\\\\"\\).then\\(r => { console.log\\(r.rows[0]\\); return pool.end\\(\\); }\\).catch\\(e => { console.error\\('FAIL:', e.message\\); process.exit\\(1\\); }\\);\")",
+      "Bash(node tmp_diverse_test.js)",
+      "Bash(PGPASSWORD=long2003 psql -h localhost -p 5432 -U postgres -d \"dulich2.0\" -f migrations/update_spot_images.sql)",
+      "PowerShell($env:PGPASSWORD = \"long2003\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -h localhost -p 5432 -U postgres -d \"dulich2.0\" -f \"migrations\\\\update_spot_images.sql\" 2>&1)",
+      "Bash(PGPASSWORD=long2003 psql -h localhost -p 5432 -U postgres -d dulich2.0)",
+      "Bash(node -e \"require\\('./src/utils/i18n.utils'\\); require\\('./src/models/repositories/spot.repository'\\); require\\('./src/models/repositories/culinary.repository'\\); require\\('./src/models/repositories/festival.repository'\\); require\\('./src/models/repositories/ocop.repository'\\); require\\('./src/models/repositories/tour.repository'\\); require\\('./src/services/culinary.service'\\); require\\('./src/services/festival.service'\\); require\\('./src/services/ocop.service'\\); require\\('./src/services/tour.service'\\); require\\('./src/controllers/culinary.controller'\\); require\\('./src/controllers/festival.controller'\\); require\\('./src/controllers/ocop.controller'\\); require\\('./src/controllers/tour.controller'\\); console.log\\('All modules loaded successfully'\\);\")"
     ]
   }
 }

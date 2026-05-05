@@ -9,6 +9,9 @@ const QRCode = require('qrcode');
 
 // Các role được bypass ownership check (quản lý nội dung toàn hệ thống)
 const BYPASS_ROLES = new Set(['system_admin', 'department_manager']);
+const GLOBAL_SPOT_ROLES = new Set(['system_admin', 'ministry_manager']);
+const DEPARTMENT_SPOT_ROLES = new Set(['department_manager']);
+const OWNER_SPOT_ROLES = new Set(['spot_operator', 'travel_company', 'service_provider']);
 
 class SpotService {
   /**
@@ -42,9 +45,21 @@ class SpotService {
   async getAllSpots(options = {}, viewer = {}) {
     const page = Math.max(1, parseInt(options.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(options.limit, 10) || 20));
-    const status = this._canManage(viewer?.user) ? options.status : 'active';
-    const effectiveOptions = { ...options, status, page, limit };
-    const cacheKey = `spots:list:${JSON.stringify(effectiveOptions)}`;
+    const effectiveOptions = this._applyListScope({ ...options, page, limit }, viewer?.user);
+    // Normalize cache key — chỉ dùng các filter ảnh hưởng đến kết quả, tránh stringify toàn object
+    const cacheKey = [
+      'spots:list',
+      effectiveOptions.lang || 'vi',
+      `p${page}`,
+      `l${limit}`,
+      effectiveOptions.status || 'active',
+      effectiveOptions.province_code || 'all',
+      effectiveOptions.category_id || 'all',
+      effectiveOptions.created_by || 'any',
+      effectiveOptions.search || '',
+      effectiveOptions.sortBy || 'created_at',
+      effectiveOptions.sortOrder || 'DESC',
+    ].join(':');
     return cacheOrFetch(cacheKey, async () => {
       const { spots, totalCount } = await SpotRepository.getAllSpots(effectiveOptions);
       const result = formatPagination(spots, totalCount, page, limit);
@@ -52,38 +67,72 @@ class SpotService {
     }, 60);
   }
 
-  async getNearbySpots(lat, lng, radiusKm = 10, limit = 50) {
+  /**
+   * Admin list — KHÔNG cache: admin cần thấy thay đổi ngay sau CRUD,
+   * traffic thấp, biến số query (status/created_by/province) khiến hit rate thấp.
+   */
+  async getAdminSpots(options = {}, viewer = {}) {
+    const page = Math.max(1, parseInt(options.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(options.limit, 10) || 20));
+    const effectiveOptions = this._applyListScope({ ...options, page, limit }, viewer?.user);
+    const { spots, totalCount } = await SpotRepository.getAllSpots(effectiveOptions);
+    const result = formatPagination(spots, totalCount, page, limit);
+    return { spots: result.data, pagination: result.pagination };
+  }
+
+  async getMapSpots(options = {}, viewer = {}) {
+    const page = Math.max(1, parseInt(options.page, 10) || 1);
+    const limit = Math.min(1000, Math.max(1, parseInt(options.limit, 10) || 500));
+    const effectiveOptions = this._applyListScope({ ...options, page, limit }, viewer?.user);
+    const cacheKey = [
+      'spots:map',
+      effectiveOptions.lang || 'vi',
+      `p${page}`,
+      `l${limit}`,
+      effectiveOptions.province_code || 'all',
+      effectiveOptions.category_id || 'all',
+      effectiveOptions.created_by || 'any',
+    ].join(':');
+    return cacheOrFetch(cacheKey, async () => {
+      const { spots, totalCount } = await SpotRepository.getAllSpots(effectiveOptions);
+      const result = formatPagination(spots, totalCount, page, limit);
+      return { spots: result.data, pagination: result.pagination };
+    }, 60);
+  }
+
+  async getNearbySpots(lat, lng, radiusKm = 10, limit = 50, lang = 'vi') {
     if (!isValidCoords(lat, lng)) {
       throw new Api400Error('Toạ độ lat/lng không hợp lệ');
     }
-    return SpotRepository.findNearby(Number(lat), Number(lng), Number(radiusKm), Number(limit));
+    return SpotRepository.findNearby(Number(lat), Number(lng), Number(radiusKm), Number(limit), lang);
   }
 
-  async getSpotsByBbox(bboxStr, limit = 500) {
+  async getSpotsByBbox(bboxStr, limit = 500, lang = 'vi') {
     const bbox = parseBbox(bboxStr);
     if (!bbox) {
       throw new Api400Error('Bbox không hợp lệ. Định dạng: minLng,minLat,maxLng,maxLat');
     }
-    return SpotRepository.findByBbox(bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat, Number(limit));
+    return SpotRepository.findByBbox(bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat, Number(limit), lang);
   }
 
   async getSpotsGeoJSON(options = {}) {
-    const cacheKey = `spots:geojson:${options.category_id || 'all'}:${options.province_code || 'all'}`;
+    const cacheKey = `spots:geojson:${options.lang || 'vi'}:${options.category_id || 'all'}:${options.province_code || 'all'}`;
     return cacheOrFetch(cacheKey, () => SpotRepository.getGeoJSON(options), 300);
   }
 
-  async getFeaturedSpots(limit = 12, categoryIds) {
-    const cacheKey = categoryIds ? `spots:featured:cats${JSON.stringify(categoryIds)}` : 'spots:featured';
-    return cacheOrFetch(cacheKey, () => SpotRepository.getFeaturedSpots(limit, categoryIds), 300);
+  async getFeaturedSpots(limit = 12, categoryIds, lang = 'vi') {
+    const cacheKey = categoryIds ? `spots:featured:${lang}:cats${JSON.stringify(categoryIds)}` : `spots:featured:${lang}`;
+    return cacheOrFetch(cacheKey, () => SpotRepository.getFeaturedSpots(limit, categoryIds, lang), 300);
   }
 
   /**
    * HIGH-08 FIX: Cache spot detail by slug — highest-traffic public endpoint
    * Cache hit = 0 DB queries; cache miss = 1 query then cached for 60s
    */
-  async getSpotBySlug(slug, viewer = {}) {
-    return cacheOrFetch(`spot:slug:${slug}:${this._canManage(viewer?.user) ? 'manage' : 'public'}`, async () => {
-      const spot = await SpotRepository.findBySlug(slug);
+  async getSpotBySlug(slug, viewer = {}, options = {}) {
+    const lang = options.lang || 'vi';
+    return cacheOrFetch(`spot:slug:${slug}:${lang}:${this._canManage(viewer?.user) ? 'manage' : 'public'}`, async () => {
+      const spot = await SpotRepository.findBySlug(slug, lang);
       if (!spot || (spot.status !== 'active' && !this._canManage(viewer?.user))) {
         throw new Api404Error('Spot not found');
       }
@@ -338,6 +387,45 @@ class SpotService {
       });
     }
     return SpotRepository.deleteSpotMedia(mediaId);
+  }
+
+  _applyListScope(options = {}, user) {
+    const roleCode = this._roleCode(user);
+    const scoped = { ...options };
+
+    if (GLOBAL_SPOT_ROLES.has(roleCode)) {
+      return scoped;
+    }
+
+    if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
+      const provinceCode = this._resolveProvinceCode(user, scoped);
+      if (!provinceCode) {
+        throw new Api400Error('Cần province_code để giới hạn dữ liệu của Sở');
+      }
+      scoped.province_code = provinceCode;
+      return scoped;
+    }
+
+    if (OWNER_SPOT_ROLES.has(roleCode)) {
+      scoped.created_by = user?.id;
+      return scoped;
+    }
+
+    scoped.status = 'active';
+    return scoped;
+  }
+
+  _resolveProvinceCode(user, options = {}) {
+    return user?.province_code
+      || user?.province?.code
+      || user?.department?.province_code
+      || user?.profile?.province_code
+      || options.province_code
+      || null;
+  }
+
+  _roleCode(user) {
+    return String(user?.role?.code || '').trim().toLowerCase();
   }
 
   _canManage(user) {

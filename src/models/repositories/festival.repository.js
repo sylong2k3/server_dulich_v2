@@ -1,7 +1,9 @@
 const db = require('../../configs/database');
+const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
 class FestivalRepository {
-    static async findAll({ page = 1, limit = 12, search, festival_type, upcoming, is_published = true, sortBy = 'start_date', sortOrder = 'ASC' }) {
+    static async findAll({ page = 1, limit = 12, search, festival_type, upcoming, is_published = true, province_code, sortBy = 'start_date', sortOrder = 'ASC', lang: rawLang = 'vi' }) {
+        const lang = normalizeLang(rawLang);
         const offset = (page - 1) * limit;
         const params = [];
         const conditions = [];
@@ -9,6 +11,7 @@ class FestivalRepository {
 
         if (is_published !== undefined) { conditions.push(`f.is_published = $${idx++}`); params.push(is_published); }
         if (festival_type) { conditions.push(`f.festival_type = $${idx++}`); params.push(festival_type); }
+        if (province_code) { conditions.push(`f.province_code = $${idx++}`); params.push(province_code); }
         if (upcoming) { conditions.push(`f.end_date >= NOW()`); }
         if (search) {
             conditions.push(`(f.name_vi ILIKE $${idx} OR f.name_en ILIKE $${idx} OR f.description_vi ILIKE $${idx})`);
@@ -16,20 +19,33 @@ class FestivalRepository {
             idx++;
         }
 
-        const allowed = ['name_vi', 'start_date', 'end_date', 'created_at'];
-        const col = allowed.includes(sortBy) ? sortBy : 'start_date';
-        const dir = sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+        const allowed = ['start_date', 'end_date', 'created_at'];
+        let orderClause;
+        if (sortBy === 'name' || sortBy === 'name_vi') {
+            orderClause = `${localizedValueSQL(lang, 'f.name_vi', 'f.name_en')} ${sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'}`;
+        } else {
+            const col = allowed.includes(sortBy) ? sortBy : 'start_date';
+            const dir = sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+            orderClause = `f.${col} ${dir}`;
+        }
 
         const sql = `
-            SELECT f.id, f.name_vi, f.name_en, f.festival_type, f.description_vi,
+            SELECT f.id,
+                   ${localizedSQL(lang, 'f.name_vi', 'f.name_en', 'name')},
+                   f.name_vi, f.name_en,
+                   f.festival_type, f.description_vi,
                    f.start_date, f.end_date, f.cover_image_url, f.location_name,
                    f.is_recurring, f.recurrence_rule, f.website,
                    f.province_code, f.spot_id, f.is_published, f.created_at,
+                   ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
+                   ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'spot_name')},
                    ST_X(f.geom::geometry) AS lng, ST_Y(f.geom::geometry) AS lat,
                    COUNT(*) OVER() AS total_count
             FROM festivals f
+            LEFT JOIN vn_units.provinces p ON f.province_code = p.code
+            LEFT JOIN tourism_spots ts ON f.spot_id = ts.id
             ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
-            ORDER BY f.${col} ${dir}
+            ORDER BY ${orderClause}
             LIMIT $${idx++} OFFSET $${idx++}
         `;
         params.push(limit, offset);
@@ -37,18 +53,25 @@ class FestivalRepository {
         return { rows: result.rows, total: parseInt(result.rows[0]?.total_count || 0) };
     }
 
-    static async findById(id) {
+    static async findById(id, rawLang = 'vi') {
+        const lang = normalizeLang(rawLang);
         const sql = `
             SELECT f.*,
+                ${localizedSQL(lang, 'f.name_vi', 'f.name_en', 'name')},
+                ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
+                ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'spot_name')},
                 ST_X(f.geom::geometry) AS lng, ST_Y(f.geom::geometry) AS lat
             FROM festivals f
+            LEFT JOIN vn_units.provinces p ON f.province_code = p.code
+            LEFT JOIN tourism_spots ts ON f.spot_id = ts.id
             WHERE f.id = $1
         `;
         const result = await db.query(sql, [id]);
         return result.rows[0] || null;
     }
 
-    static async getCalendar({ from, to, province_code, festival_type }) {
+    static async getCalendar({ from, to, province_code, festival_type, lang: rawLang = 'vi' }) {
+        const lang = normalizeLang(rawLang);
         const params = [from, to];
         const conditions = [
             'f.is_published = true',
@@ -61,11 +84,16 @@ class FestivalRepository {
         if (festival_type) { conditions.push(`f.festival_type = $${idx++}`); params.push(festival_type); }
 
         const sql = `
-            SELECT f.id, f.name_vi, f.name_en, f.festival_type, f.start_date, f.end_date,
+            SELECT f.id,
+                   ${localizedSQL(lang, 'f.name_vi', 'f.name_en', 'name')},
+                   f.name_vi, f.name_en,
+                   f.festival_type, f.start_date, f.end_date,
                    f.cover_image_url, f.location_name, f.is_recurring, f.recurrence_rule,
                    f.province_code, f.spot_id,
+                   ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
                    ST_X(f.geom::geometry) AS lng, ST_Y(f.geom::geometry) AS lat
             FROM festivals f
+            LEFT JOIN vn_units.provinces p ON f.province_code = p.code
             WHERE ${conditions.join(' AND ')}
             ORDER BY f.start_date ASC
         `;

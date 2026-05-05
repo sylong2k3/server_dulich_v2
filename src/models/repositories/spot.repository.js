@@ -1,4 +1,5 @@
 const { query } = require('../../configs/database');
+const { Api400Error } = require('../../core/error.response');
 const { create, updateById } = require('../../utils/database');
 const {
   dWithinSQL,
@@ -7,6 +8,53 @@ const {
   asGeoJSON,
   extractCoords,
 } = require('../../utils/geo.utils');
+const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
+
+const parsePositiveIntList = (value, fieldName) => {
+  if (value === undefined || value === null) return undefined;
+
+  const fail = () => {
+    throw new Api400Error(`${fieldName} không hợp lệ`);
+  };
+
+  const expand = (input) => {
+    if (Array.isArray(input)) return input.flatMap(expand);
+
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (!trimmed) return [];
+
+      if (trimmed.startsWith('[')) {
+        try {
+          return expand(JSON.parse(trimmed));
+        } catch {
+          fail();
+        }
+      }
+
+      return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+
+    return [input];
+  };
+
+  const ids = expand(value).map((item) => {
+    if (typeof item === 'number' && Number.isInteger(item) && item > 0) {
+      return item;
+    }
+
+    if (typeof item === 'string' && /^\d+$/.test(item)) {
+      const id = Number(item);
+      if (Number.isSafeInteger(id) && id > 0) return id;
+    }
+
+    fail();
+  });
+
+  if (!ids.length) fail();
+
+  return [...new Set(ids)];
+};
 
 class SpotRepository {
   static tableName = 'tourism_spots';
@@ -20,15 +68,20 @@ class SpotRepository {
       limit = 20,
       category_ids,
       province_code,
-      district_id,
       status = 'active',
       is_featured,
       rating_min,
       search,
-      sortBy = 'created_at',
+      sortBy,
       sortOrder = 'DESC',
       capacity = false,
+      lat,
+      lng,
+      radius_km = 10,
+      created_by,
+      lang: rawLang = 'vi',
     } = options;
+    const lang = normalizeLang(rawLang);
 
     const values = [];
     let paramCount = 1;
@@ -41,7 +94,7 @@ class SpotRepository {
     }
 
     if (category_ids !== undefined && category_ids !== null) {
-      const ids = (Array.isArray(category_ids) ? category_ids : [category_ids]).map(Number);
+      const ids = parsePositiveIntList(category_ids, 'category_ids');
       whereClause += ` AND ts.category_id = ANY($${paramCount}::int[])`;
       values.push(ids);
       paramCount++;
@@ -53,9 +106,9 @@ class SpotRepository {
       paramCount++;
     }
 
-    if (district_id) {
-      whereClause += ` AND ts.district_id = $${paramCount}`;
-      values.push(Number(district_id));
+    if (created_by) {
+      whereClause += ` AND ts.created_by = $${paramCount}`;
+      values.push(created_by);
       paramCount++;
     }
 
@@ -82,11 +135,38 @@ class SpotRepository {
       paramCount += 2;
     }
 
-    const allowedSort = ['created_at', 'name_vi', 'rating_avg', 'rating_count'];
-    const safeSort = allowedSort.includes(sortBy) ? sortBy : 'created_at';
-    const safeOrder = ['ASC', 'DESC'].includes(sortOrder.toUpperCase())
-      ? sortOrder.toUpperCase()
-      : 'DESC';
+    const hasNearbyFilter = lat !== undefined && lat !== null && lng !== undefined && lng !== null;
+    let distanceSelect = '';
+    if (hasNearbyFilter) {
+      const lngParam = paramCount;
+      const latParam = paramCount + 1;
+      const radiusParam = paramCount + 2;
+      whereClause += ` AND ${dWithinSQL('ts.geom', lngParam, latParam, radiusParam)}`;
+      distanceSelect = `, ${distanceSQL('ts.geom', lngParam, latParam)} AS distance_m`;
+      values.push(Number(lng), Number(lat), Number(radius_km) * 1000);
+      paramCount += 3;
+    }
+
+    const allowedSort = ['created_at', 'rating_avg', 'rating_count'];
+    const safeSort = hasNearbyFilter && sortBy === 'distance_m'
+      ? 'distance_m'
+      : sortBy === 'name' || sortBy === 'name_vi'
+        ? 'name'
+      : allowedSort.includes(sortBy)
+        ? sortBy
+        : hasNearbyFilter && !sortBy
+          ? 'distance_m'
+          : 'created_at';
+    const safeOrder = hasNearbyFilter && safeSort === 'distance_m' && !sortBy
+      ? 'ASC'
+      : ['ASC', 'DESC'].includes(String(sortOrder).toUpperCase())
+        ? String(sortOrder).toUpperCase()
+        : 'DESC';
+    const orderBy = safeSort === 'distance_m'
+      ? `distance_m ${safeOrder}`
+      : safeSort === 'name'
+        ? `${localizedValueSQL(lang, 'ts.name_vi', 'ts.name_en')} ${safeOrder}`
+      : `ts.${safeSort} ${safeOrder}`;
 
     const offset = (page - 1) * limit;
 
@@ -110,21 +190,24 @@ class SpotRepository {
       : '';
 
     const sql = `
-      SELECT ts.id, ts.slug, ts.name_vi, ts.name_en,
-        ts.description_vi, ts.address_vi,
+      SELECT ts.id, ts.slug,
+        ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'name')},
+        ${localizedSQL(lang, 'ts.description_vi', 'ts.description_en', 'description')},
+        ${localizedSQL(lang, 'ts.address_vi', 'ts.address_en', 'address')},
         ts.rating_avg, ts.rating_count,
         ts.is_featured, ts.status,
         ts.ticket_price_adult, ts.ticket_price_child, ts.ticket_currency,
         ts.opening_hours, ts.phone, ts.website,
         ts.has_vr_360, ts.has_ar_support, ts.has_audio_guide,
         ts.max_capacity,
-        ${asGeoJSON('ts.geom')},
+        ${asGeoJSON('ts.geom')}
+        ${distanceSelect},
         ts.category_id,
-        sc.name_vi AS category_name,
+        ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
         sc.parent_id AS category_parent_id,
-        scp.name_vi AS category_parent_name,
-        p.name AS province_name,
-        cm.name AS commune_name,
+        ${localizedSQL(lang, 'scp.name_vi', 'scp.name_en', 'category_parent_name')},
+        ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
+        ${localizedSQL(lang, 'cm.name', 'cm.name_en', 'commune_name')},
         (SELECT url FROM spot_media sm WHERE sm.spot_id = ts.id AND sm.is_primary = true LIMIT 1) AS primary_image,
         COUNT(*) OVER() AS total_count
         ${capacitySelect}
@@ -135,7 +218,7 @@ class SpotRepository {
       LEFT JOIN vn_units.wards cm ON ts.ward_code = cm.code
       ${capacityJoin}
       ${whereClause}
-      ORDER BY ts.${safeSort} ${safeOrder}
+      ORDER BY ${orderBy}
       LIMIT $${paramCount} OFFSET $${paramCount + 1}
     `;
     values.push(limit, offset);
@@ -155,16 +238,19 @@ class SpotRepository {
   /**
    * Tìm spots trong bán kính (nearby)
    */
-  static async findNearby(lat, lng, radiusKm = 10, limit = 50) {
+  static async findNearby(lat, lng, radiusKm = 10, limit = 50, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const radiusM = radiusKm * 1000;
     const sql = `
-      SELECT ts.id, ts.slug, ts.name_vi, ts.name_en,
+      SELECT ts.id, ts.slug,
+        ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'name')},
         ts.rating_avg, ts.rating_count, ts.is_featured, ts.status,
         ts.ticket_price_adult, ts.ticket_currency,
         ${extractCoords('ts.geom')},
         ${distanceSQL('ts.geom', 1, 2)} AS distance_m,
-        sc.name_vi AS category_name, sc.color_hex AS category_color, sc.icon_url AS category_icon,
-        p.name AS province_name,
+        ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
+        sc.color_hex AS category_color, sc.icon_url AS category_icon,
+        ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
         (SELECT url FROM spot_media sm WHERE sm.spot_id = ts.id AND sm.is_primary = true LIMIT 1) AS primary_image
       FROM ${this.tableName} ts
       LEFT JOIN spot_categories sc ON ts.category_id = sc.id
@@ -181,13 +267,16 @@ class SpotRepository {
   /**
    * Tìm spots trong bbox
    */
-  static async findByBbox(minLng, minLat, maxLng, maxLat, limit = 500) {
+  static async findByBbox(minLng, minLat, maxLng, maxLat, limit = 500, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const sql = `
-      SELECT ts.id, ts.slug, ts.name_vi,
+      SELECT ts.id, ts.slug,
+        ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'name')},
         ts.rating_avg, ts.is_featured, ts.status,
         ${extractCoords('ts.geom')},
         ${asGeoJSON('ts.geom')},
-        sc.name_vi AS category_name, sc.code AS category_code,
+        ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
+        sc.code AS category_code,
         sc.color_hex AS category_color, sc.icon_url AS category_icon
       FROM ${this.tableName} ts
       LEFT JOIN spot_categories sc ON ts.category_id = sc.id
@@ -203,7 +292,8 @@ class SpotRepository {
    * GeoJSON FeatureCollection cho map
    */
   static async getGeoJSON(options = {}) {
-    const { category_id, province_code } = options;
+    const { category_id, province_code, lang: rawLang = 'vi' } = options;
+    const lang = normalizeLang(rawLang);
     const values = [];
     let paramCount = 1;
     let whereClause = "WHERE ts.status = 'active'";
@@ -231,9 +321,9 @@ class SpotRepository {
             'properties', json_build_object(
               'id', ts.id,
               'slug', ts.slug,
-              'name_vi', ts.name_vi,
+              'name', ${localizedValueSQL(lang, 'ts.name_vi', 'ts.name_en')},
               'category_code', sc.code,
-              'category_name', sc.name_vi,
+              'category_name', ${localizedValueSQL(lang, 'sc.name_vi', 'sc.name_en')},
               'category_color', sc.color_hex,
               'category_icon', sc.icon_url,
               'rating_avg', ts.rating_avg,
@@ -253,21 +343,25 @@ class SpotRepository {
   /**
    * Spots nổi bật
    */
-  static async getFeaturedSpots(limit = 12, categoryIds) {
+  static async getFeaturedSpots(limit = 12, categoryIds, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const params = [limit];
     let categoryFilter = '';
     if (categoryIds !== undefined && categoryIds !== null) {
-      const ids = (Array.isArray(categoryIds) ? categoryIds : [categoryIds]).map(Number);
+      const ids = parsePositiveIntList(categoryIds, 'category_ids');
       params.push(ids);
       categoryFilter = `AND ts.category_id = ANY($${params.length}::int[])`;
     }
     const sql = `
-      SELECT ts.id, ts.slug, ts.name_vi, ts.name_en,
-        ts.description_vi, ts.rating_avg, ts.rating_count,
+      SELECT ts.id, ts.slug,
+        ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'name')},
+        ${localizedSQL(lang, 'ts.description_vi', 'ts.description_en', 'description')},
+        ts.rating_avg, ts.rating_count,
         ts.ticket_price_adult, ts.ticket_currency,
         ${extractCoords('ts.geom')},
-        sc.name_vi AS category_name, sc.color_hex AS category_color,
-        p.name AS province_name,
+        ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
+        sc.color_hex AS category_color,
+        ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
         (SELECT url FROM spot_media sm WHERE sm.spot_id = ts.id AND sm.is_primary = true LIMIT 1) AS primary_image
       FROM ${this.tableName} ts
       LEFT JOIN spot_categories sc ON ts.category_id = sc.id
@@ -283,15 +377,29 @@ class SpotRepository {
   /**
    * Chi tiết spot theo slug — đầy đủ: capacity, rating, media, business
    */
-  static async findBySlug(slug) {
+  static async findBySlug(slug, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const sql = `
-      SELECT ts.*,
+      SELECT ts.id, ts.category_id, ts.province_code, ts.ward_code, ts.slug,
+        ts.altitude_m, ts.opening_hours,
+        ts.ticket_price_adult, ts.ticket_price_child, ts.ticket_currency,
+        ts.phone, ts.email, ts.website,
+        ts.max_capacity, ts.alert_threshold_pct,
+        ts.rating_avg, ts.rating_count,
+        ts.has_vr_360, ts.has_ar_support, ts.has_audio_guide,
+        ts.qr_code_url, ts.status, ts.is_featured,
+        ts.created_by, ts.created_at, ts.updated_at,
+        ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'name')},
+        ${localizedSQL(lang, 'ts.description_vi', 'ts.description_en', 'description')},
+        ${localizedSQL(lang, 'ts.address_vi', 'ts.address_en', 'address')},
         ${extractCoords('ts.geom')},
         ${asGeoJSON('ts.geom')},
-        sc.name_vi  AS category_name,  sc.code       AS category_code,
+        ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
+        sc.code       AS category_code,
         sc.color_hex AS category_color, sc.icon_url   AS category_icon,
-        p.name      AS province_name,  p.code        AS province_code,
-        c.name      AS commune_name,
+        ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
+        p.code        AS province_code,
+        ${localizedSQL(lang, 'c.name', 'c.name_en', 'commune_name')},
 
         -- Sức chứa hiện tại (bản ghi mới nhất)
         cap.visitor_count     AS current_visitor_count,
@@ -308,7 +416,7 @@ class SpotRepository {
             'business_id',   b.id,
             'business_name', b.business_name,
             'service_id',    sv.id,
-            'service_name',  sv.service_name_vi,
+            'service_name',  ${localizedValueSQL(lang, 'sv.service_name_vi', 'sv.service_name_en')},
             'service_type',  sv.category,
             'price_from',    sv.price_from,
             'booking_url',   sv.booking_url
@@ -362,13 +470,25 @@ class SpotRepository {
    * Tìm theo ID
    */
   static async findById(id) {
+    const lang = 'vi';
     const sql = `
-      SELECT ts.*,
+      SELECT ts.id, ts.category_id, ts.province_code, ts.ward_code, ts.slug,
+        ts.altitude_m, ts.opening_hours,
+        ts.ticket_price_adult, ts.ticket_price_child, ts.ticket_currency,
+        ts.phone, ts.email, ts.website,
+        ts.max_capacity, ts.alert_threshold_pct,
+        ts.rating_avg, ts.rating_count,
+        ts.has_vr_360, ts.has_ar_support, ts.has_audio_guide,
+        ts.qr_code_url, ts.status, ts.is_featured,
+        ts.created_by, ts.created_at, ts.updated_at,
+        ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'name')},
+        ${localizedSQL(lang, 'ts.description_vi', 'ts.description_en', 'description')},
+        ${localizedSQL(lang, 'ts.address_vi', 'ts.address_en', 'address')},
         ${extractCoords('ts.geom')},
         ${asGeoJSON('ts.geom')},
-        sc.name_vi AS category_name,
-        p.name AS province_name,
-        cm.name AS commune_name
+        ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
+        ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
+        ${localizedSQL(lang, 'cm.name', 'cm.name_en', 'commune_name')}
       FROM ${this.tableName} ts
       LEFT JOIN spot_categories sc ON ts.category_id = sc.id
       LEFT JOIN vn_units.provinces p ON ts.province_code = p.code

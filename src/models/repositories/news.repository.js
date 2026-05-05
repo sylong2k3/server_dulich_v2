@@ -96,6 +96,15 @@ class NewsRepository {
     await db.query('UPDATE news SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1', [id]);
   }
 
+  // Batch flush: cộng dồn delta thay vì gọi từng +1, tránh hot-path DB write
+  static async batchIncrementViewCount(id, delta) {
+    if (!delta || delta <= 0) return;
+    await db.query(
+      'UPDATE news SET view_count = COALESCE(view_count, 0) + $2 WHERE id = $1',
+      [id, delta],
+    );
+  }
+
   static async slugExists(slug, excludeId = null) {
     const sql = excludeId
       ? 'SELECT id FROM news WHERE slug = $1 AND id != $2'

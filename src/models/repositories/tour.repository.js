@@ -1,9 +1,11 @@
 const db = require('../../configs/database');
+const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
 class TourRepository {
   // ==================== TOUR PACKAGES ====================
 
-  static async findAll({ page = 1, limit = 10, search, status, province_code, is_featured, business_id, sortBy = 'created_at', sortOrder = 'DESC' }) {
+  static async findAll({ page = 1, limit = 10, search, status, province_code, is_featured, business_id, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
+    const lang = normalizeLang(rawLang);
     const offset = (page - 1) * limit;
     const params = [];
     const conditions = [];
@@ -19,13 +21,21 @@ class TourRepository {
       idx++;
     }
 
-    const allowed = ['id', 'name_vi', 'price_from_vnd', 'duration_days', 'rating_avg', 'created_at', 'published_at'];
-    const col = allowed.includes(sortBy) ? sortBy : 'created_at';
-    const dir = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const allowed = ['id', 'price_from_vnd', 'duration_days', 'rating_avg', 'created_at', 'published_at'];
+    let orderClause;
+    if (sortBy === 'name' || sortBy === 'name_vi') {
+      orderClause = `${localizedValueSQL(lang, 'tp.name_vi', 'tp.name_en')} ${sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'}`;
+    } else {
+      const col = allowed.includes(sortBy) ? sortBy : 'created_at';
+      const dir = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      orderClause = `tp.${col} ${dir}`;
+    }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const sql = `
-      SELECT tp.id, tp.business_id, tp.province_code, tp.name_vi, tp.name_en, tp.slug,
+      SELECT tp.id, tp.business_id, tp.province_code,
+             ${localizedSQL(lang, 'tp.name_vi', 'tp.name_en', 'name')},
+             tp.name_vi, tp.name_en, tp.slug,
              tp.description_vi, tp.duration_days, tp.price_from_vnd,
              tp.max_guests, tp.includes, tp.excludes,
              tp.start_location_vi, tp.end_location_vi,
@@ -33,11 +43,13 @@ class TourRepository {
              tp.status, tp.is_featured, tp.published_at,
              tp.created_at, tp.updated_at,
              b.business_name,
+             ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
              COUNT(*) OVER() AS total_count
       FROM tour_packages tp
       LEFT JOIN businesses b ON tp.business_id = b.id
+      LEFT JOIN vn_units.provinces p ON tp.province_code = p.code
       ${where}
-      ORDER BY tp.${col} ${dir}
+      ORDER BY ${orderClause}
       LIMIT $${idx++} OFFSET $${idx++}
     `;
     params.push(limit, offset);
@@ -45,10 +57,13 @@ class TourRepository {
     return { rows: result.rows, total: parseInt(result.rows[0]?.total_count || 0) };
   }
 
-  static async findById(id) {
+  static async findById(id, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const sql = `
       SELECT tp.*,
+             ${localizedSQL(lang, 'tp.name_vi', 'tp.name_en', 'name')},
              b.business_name,
+             ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
              json_agg(
                json_build_object(
                  'id', s.id, 'day_number', s.day_number, 'stop_order', s.stop_order,
@@ -60,32 +75,39 @@ class TourRepository {
              ) FILTER (WHERE s.id IS NOT NULL) AS stops
       FROM tour_packages tp
       LEFT JOIN businesses b ON tp.business_id = b.id
+      LEFT JOIN vn_units.provinces p ON tp.province_code = p.code
       LEFT JOIN tour_package_stops s ON s.tour_package_id = tp.id
       WHERE tp.id = $1
-      GROUP BY tp.id, b.business_name
+      GROUP BY tp.id, b.business_name, p.name, p.name_en
     `;
     const result = await db.query(sql, [id]);
     return result.rows[0] || null;
   }
 
-  static async findBySlug(slug) {
+  static async findBySlug(slug, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const sql = `
       SELECT tp.*,
+             ${localizedSQL(lang, 'tp.name_vi', 'tp.name_en', 'name')},
              b.business_name,
+             ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
              json_agg(
                json_build_object(
                  'id', s.id, 'day_number', s.day_number, 'stop_order', s.stop_order,
                  'spot_id', s.spot_id, 'business_id', s.business_id,
                  'title_vi', s.title_vi, 'description_vi', s.description_vi,
                  'planned_duration_min', s.planned_duration_min,
-                 'geom', ST_AsGeoJSON(s.geom)::json
+                 'geom', ST_AsGeoJSON(s.geom)::json,
+                 'spot_name', ${localizedValueSQL(lang, 'ts.name_vi', 'ts.name_en')}
                ) ORDER BY s.day_number, s.stop_order
              ) FILTER (WHERE s.id IS NOT NULL) AS stops
       FROM tour_packages tp
       LEFT JOIN businesses b ON tp.business_id = b.id
+      LEFT JOIN vn_units.provinces p ON tp.province_code = p.code
       LEFT JOIN tour_package_stops s ON s.tour_package_id = tp.id
+      LEFT JOIN tourism_spots ts ON s.spot_id = ts.id
       WHERE tp.slug = $1
-      GROUP BY tp.id, b.business_name
+      GROUP BY tp.id, b.business_name, p.name, p.name_en
     `;
     const result = await db.query(sql, [slug]);
     return result.rows[0] || null;
@@ -157,10 +179,12 @@ class TourRepository {
 
   // ==================== TOUR PACKAGE STOPS ====================
 
-  static async getStopsByTourId(tourPackageId) {
+  static async getStopsByTourId(tourPackageId, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const sql = `
       SELECT s.*,
              ST_AsGeoJSON(s.geom)::json AS geom_json,
+             ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'spot_name')},
              ts.name_vi AS spot_name_vi
       FROM tour_package_stops s
       LEFT JOIN tourism_spots ts ON s.spot_id = ts.id
