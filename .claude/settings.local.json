@@ -107,7 +107,17 @@
       "PowerShell(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match \"kind-einstein|blissful-chatterjee\" -or $_.ExecutablePath -match \"kind-einstein|blissful-chatterjee\" } | Select-Object ProcessId, Name, ExecutablePath, CommandLine | Format-List)",
       "Bash(cmd //c \"rd /s /q \\\\\"C:\\\\Users\\\\SunSun\\\\Documents\\\\ProjectThayNgoc\\\\DuLichNinhBinhNew\\\\server\\\\.claude\\\\worktrees\\\\blissful-chatterjee-68f58e\\\\\"\")",
       "Bash(echo \"exit=$?\")",
-      "Bash(cmd //c \"rd /s /q \\\\\"C:\\\\Users\\\\SunSun\\\\Documents\\\\ProjectThayNgoc\\\\DuLichNinhBinhNew\\\\server\\\\.claude\\\\worktrees\\\\kind-einstein-d14601\\\\\"\")"
+      "Bash(cmd //c \"rd /s /q \\\\\"C:\\\\Users\\\\SunSun\\\\Documents\\\\ProjectThayNgoc\\\\DuLichNinhBinhNew\\\\server\\\\.claude\\\\worktrees\\\\kind-einstein-d14601\\\\\"\")",
+      "Bash(node -e \"const A = require\\('./src/middlewares/auth.middleware'\\); console.log\\(typeof A, Object.keys\\(A\\), 'authenticateToken=', typeof A.authenticateToken, 'optionalAuth=', typeof A.optionalAuth, 'resolveAuthActor=', typeof A.resolveAuthActor\\);\")",
+      "Bash(node -c src/services/chatbot.service.js)",
+      "Bash(node -c src/services/chatbot.tools.js)",
+      "Bash(node -c src/controllers/chatbot.controller.js)",
+      "Bash(node -c src/models/repositories/chatbot.repository.js)",
+      "Bash(node -c src/configs/openai.js)",
+      "Bash(node tmp_perf_test.js)",
+      "Bash(node tmp_attach_test.js)",
+      "Bash(node tmp_n8n_test.js)",
+      "Bash(node tmp_prompt_test.js)"
     ]
   }
 }

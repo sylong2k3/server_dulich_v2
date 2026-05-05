@@ -1,15 +1,21 @@
 const asyncHandler = require('../helpers/async-handler');
 const { OK, CREATED } = require('../core/success.response');
 const ChatbotService = require('../services/chatbot.service');
+const AuthMiddleware = require('../middlewares/auth.middleware');
+
+/** Lấy actor cho mọi request: { userId } khi đã đăng nhập, ngược lại { anonymousId }. */
+function actorFrom(req) {
+  return AuthMiddleware.resolveAuthActor(req);
+}
 
 class ChatbotController {
   // NV-50/51: Tạo phiên chat mới
   static createSession = asyncHandler(async (req, res) => {
-    const result = await ChatbotService.createSession(req.user?.id || null, req.body);
+    const result = await ChatbotService.createSession(actorFrom(req), req.body);
     return CREATED(res, 'Phiên chat được tạo', result);
   });
 
-  // Danh sách phiên chat của user
+  // Danh sách phiên chat của user (yêu cầu login)
   static getSessions = asyncHandler(async (req, res) => {
     const result = await ChatbotService.getUserSessions(req.user.id, req.query);
     return OK(res, 'Danh sách phiên chat', result);
@@ -17,7 +23,7 @@ class ChatbotController {
 
   // Lấy tin nhắn trong phiên
   static getMessages = asyncHandler(async (req, res) => {
-    const result = await ChatbotService.getMessages(req.params.sessionId, req.user?.id || null, req.query);
+    const result = await ChatbotService.getMessages(req.params.sessionId, actorFrom(req), req.query);
     return OK(res, 'Tin nhắn trong phiên chat', result);
   });
 
@@ -25,7 +31,7 @@ class ChatbotController {
   static sendMessage = asyncHandler(async (req, res) => {
     const result = await ChatbotService.sendMessage(
       req.params.sessionId,
-      req.user?.id || null,
+      actorFrom(req),
       req.body.message
     );
     return OK(res, 'Tin nhắn đã được xử lý', result);
@@ -33,7 +39,7 @@ class ChatbotController {
 
   // Xóa phiên chat
   static deleteSession = asyncHandler(async (req, res) => {
-    await ChatbotService.deleteSession(req.params.sessionId, req.user?.id || null);
+    await ChatbotService.deleteSession(req.params.sessionId, actorFrom(req));
     return OK(res, 'Phiên chat đã được xóa');
   });
 }

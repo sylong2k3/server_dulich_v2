@@ -424,8 +424,12 @@ const HANDLERS = {
               c.capacity_pct  AS occupancy_pct,
               c.status        AS capacity_status,
               c.recorded_at,
-              CASE WHEN s.max_capacity > 0 AND c.visitor_count >= s.max_capacity
-                   THEN true ELSE false END AS is_overloaded
+              CASE
+                WHEN s.max_capacity IS NULL OR s.max_capacity = 0 THEN NULL
+                WHEN c.visitor_count IS NULL THEN NULL
+                WHEN c.visitor_count >= s.max_capacity THEN true
+                ELSE false
+              END AS is_overloaded
        FROM tourism_spots s
        LEFT JOIN LATERAL (
          SELECT visitor_count, capacity_pct, status, recorded_at
@@ -435,7 +439,11 @@ const HANDLERS = {
        WHERE s.id = $1`,
       [spot_id]
     );
-    return rows[0] || { error: 'Không tìm thấy điểm du lịch' };
+    if (!rows[0]) return { error: 'Không tìm thấy điểm du lịch' };
+    return {
+      ...rows[0],
+      capacity_unknown: rows[0].max_capacity == null || rows[0].max_capacity === 0,
+    };
   },
 
   async search_festivals(args) {
@@ -530,19 +538,59 @@ const HANDLERS = {
   },
 
   async get_statistics_summary(args) {
-    const { province_code } = args || {};
-    const params = province_code ? [province_code] : [];
-    const where = province_code ? 'AND province_code = $1' : '';
+    const { province_code, from_date, to_date } = args || {};
+
+    // Builder: ghép điều kiện theo cột date của từng bảng, đánh số $i tuần tự.
+    const buildWhere = (dateCol) => {
+      const conds = [];
+      const params = [];
+      if (province_code) {
+        params.push(province_code);
+        conds.push(`province_code = $${params.length}`);
+      }
+      if (from_date && dateCol) {
+        params.push(from_date);
+        conds.push(`${dateCol} >= $${params.length}`);
+      }
+      if (to_date && dateCol) {
+        params.push(to_date);
+        conds.push(`${dateCol} <= $${params.length}`);
+      }
+      return { suffix: conds.length ? `AND ${conds.join(' AND ')}` : '', params };
+    };
+
+    const spotsW = buildWhere('created_at');
+    const bizW   = buildWhere('created_at');
+    // festivals: nếu có from_date dùng nó làm mốc "upcoming", else CURRENT_DATE.
+    const fesParams = [];
+    const fesConds = [];
+    if (province_code) { fesParams.push(province_code); fesConds.push(`province_code = $${fesParams.length}`); }
+    if (to_date)       { fesParams.push(to_date);       fesConds.push(`start_date <= $${fesParams.length}`); }
+    fesParams.push(from_date || null);
+    const fesAnchorIdx = fesParams.length;
+
     const [spotsRes, businessesRes, festivalsRes] = await Promise.all([
-      pool.query(`SELECT COUNT(*)::int AS n FROM tourism_spots WHERE status='active' ${where}`, params),
-      pool.query(`SELECT COUNT(*)::int AS n FROM businesses WHERE status='approved' ${where}`, params),
-      pool.query(`SELECT COUNT(*)::int AS n FROM festivals WHERE end_date >= CURRENT_DATE ${province_code ? 'AND province_code = $1' : ''}`, params),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM tourism_spots WHERE status='active' ${spotsW.suffix}`,
+        spotsW.params
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM businesses WHERE status='approved' ${bizW.suffix}`,
+        bizW.params
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM festivals
+         WHERE end_date >= COALESCE($${fesAnchorIdx}::date, CURRENT_DATE)
+         ${fesConds.length ? 'AND ' + fesConds.join(' AND ') : ''}`,
+        fesParams
+      ),
     ]);
     return {
       active_spots: spotsRes.rows[0].n,
       approved_businesses: businessesRes.rows[0].n,
       upcoming_festivals: festivalsRes.rows[0].n,
       province_code: province_code || null,
+      period: { from_date: from_date || null, to_date: to_date || null },
     };
   },
 
@@ -564,13 +612,91 @@ function getToolDefinitions(sessionType = 'tourist') {
  * Gọi tool và trả về { result, mapAction? }.
  * mapAction được set khi tool là navigate_map.
  */
+/**
+ * Trích xuất các item ĐỊA ĐIỂM (có toạ độ lat/lng) từ kết quả tool, chuẩn hoá
+ * thành card mà FE Mapbox hiển thị + nút "Fly to". KHÔNG bao gồm category.
+ *
+ * Chỉ áp dụng cho các tool về địa điểm: search_spots, get_spot_detail,
+ * search_festivals. Các tool không có toạ độ (news, vlog, culinary, ocop,
+ * route, capacity) trả về [] → service không inject attach_items.
+ */
+/**
+ * Cắt mô tả về tối đa N ký tự, bảo toàn ranh giới câu/từ.
+ */
+function truncateText(text, max = 280) {
+  if (!text || typeof text !== 'string') return null;
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const lastDot = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+  if (lastDot > max * 0.6) return cut.slice(0, lastDot + 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut) + '…';
+}
+
+function extractAttachableItems(toolName, result) {
+  if (!result || result.error) return [];
+  const SPOT_TOOLS = new Set(['search_spots', 'get_spot_detail']);
+  const FESTIVAL_TOOLS = new Set(['search_festivals']);
+
+  let type;
+  if (SPOT_TOOLS.has(toolName)) type = 'spot';
+  else if (FESTIVAL_TOOLS.has(toolName)) type = 'festival';
+  else return [];
+
+  // get_spot_detail trả result.item (full info), search_* trả result.items (summary)
+  const isDetail = toolName === 'get_spot_detail';
+  const arr = Array.isArray(result.items)
+    ? result.items
+    : (result.item ? [result.item] : []);
+
+  return arr
+    .filter(it => it && it.lat != null && it.lng != null)
+    .map(it => {
+      const card = {
+        id: it.id,
+        type,
+        name: it.name_vi || it.name_en || it.name || '(không tên)',
+        slug: it.slug || null,
+        lat: Number(it.lat),
+        lng: Number(it.lng),
+        image_url: it.cover_image_url || it.primary_image || null,
+        rating_avg: it.rating_avg ?? null,
+        rating_count: it.rating_count ?? null,
+        is_featured: !!it.is_featured,
+      };
+
+      if (type === 'spot') {
+        if (it.address_vi) card.address = it.address_vi;
+        if (it.ticket_price_adult != null) card.ticket_price_adult = it.ticket_price_adult;
+        if (it.has_vr_360) card.has_vr_360 = true;
+        if (it.has_audio_guide) card.has_audio_guide = true;
+
+        // Detail card: thêm thông tin đầy đủ cho FE render rich card
+        if (isDetail) {
+          if (it.description_vi) card.description = truncateText(it.description_vi, 400);
+          if (it.opening_hours) card.opening_hours = it.opening_hours;
+          if (it.ticket_price_child != null) card.ticket_price_child = it.ticket_price_child;
+          if (it.phone) card.phone = it.phone;
+          if (it.website) card.website = it.website;
+        }
+      } else if (type === 'festival') {
+        if (it.start_date) card.start_date = it.start_date;
+        if (it.end_date) card.end_date = it.end_date;
+        if (it.location_name) card.location_name = it.location_name;
+      }
+      return card;
+    });
+}
+
 async function callTool(name, args, ctx = {}) {
   const handler = HANDLERS[name];
   if (!handler) return { result: { error: `Unknown tool: ${name}` } };
   try {
     const result = await handler(args || {}, ctx);
     const mapAction = name === 'navigate_map' && result?.map_action ? result.map_action : null;
-    return { result, mapAction };
+    const attachItems = extractAttachableItems(name, result);
+    return { result, mapAction, attachItems };
   } catch (err) {
     return { result: { error: err.message || 'Tool execution failed' } };
   }
@@ -580,4 +706,5 @@ module.exports = {
   TOOL_DEFINITIONS,
   getToolDefinitions,
   callTool,
+  extractAttachableItems,
 };
