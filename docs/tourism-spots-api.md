@@ -85,8 +85,7 @@ status = 'active'
 | `page` | number | Mặc định `1` |
 | `limit` | number | Mặc định `20`, tối đa `100` |
 | `search` | string | Tìm theo tên hoặc mô tả |
-| `category_id` | number | Lọc theo **1 danh mục** — số nguyên, VD: `?category_id=3` |
-| `category_ids` | string | Lọc theo **nhiều danh mục** — JSON array, VD: `?category_ids=[1,2,3]` |
+| `category_id` | number | ID danh mục điểm du lịch — số nguyên, VD: `?category_id=3` |
 | `province_code` | string | Mã tỉnh/thành |
 | `status` | string | Chỉ có tác dụng với role được phép xem nội bộ |
 | `is_featured` | boolean | Lọc điểm nổi bật |
@@ -143,8 +142,7 @@ checkPermission('spots', 'read')
 | `page` | number | Mặc định `1` |
 | `limit` | number | Mặc định `20`, tối đa `100` |
 | `search` | string | Tìm theo tên hoặc mô tả |
-| `category_id` | number | Lọc theo **1 danh mục** — số nguyên, VD: `?category_id=3` |
-| `category_ids` | string | Lọc theo **nhiều danh mục** — JSON array, VD: `?category_ids=[1,2,3]` |
+| `category_id` | number | ID danh mục điểm du lịch — số nguyên, VD: `?category_id=3` |
 | `province_code` | string | Bắt buộc thực tế với `department_manager` |
 | `status` | string | `active`, `inactive`, `pending` |
 | `is_featured` | boolean | Lọc điểm nổi bật |
@@ -315,10 +313,7 @@ Lấy toàn bộ thông tin chi tiết một điểm bất kỳ (kể cả chưa
 ## Lưu ý dành cho Backend
 
 - **Không dùng `district_id`** cho `tourism_spots` — bảng không có cột này.
-- **Lọc theo danh mục** hỗ trợ 2 tham số song song:
-  - `category_id` (number): lọc 1 danh mục — `?category_id=3`
-  - `category_ids` (JSON array string): lọc nhiều danh mục — `?category_ids=[1,2,3]`
-  - Nếu truyền cả 2, `category_ids` được ưu tiên.
+- **`category_id`** là số nguyên đơn (integer). Ví dụ: `?category_id=3`.
 - Role `department_manager` hiện chưa có `province_code` trong bảng `users`, nên frontend/BE caller cần truyền `province_code` khi gọi route admin/map cho Sở. Nếu sau này thêm `province_code` vào user profile, service đã có sẵn fallback để đọc từ `user.province_code`.
 - Route cũ `/spots/nearby` vẫn giữ để tương thích ngược, nhưng màn hình bản đồ nên dùng `/spots/map`.
 - Các route dùng chung `SpotRepository.getAllSpots` — cần cẩn thận khi sửa select/filter để không ảnh hưởng cả 3 màn hình (public, admin, map).

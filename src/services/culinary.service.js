@@ -8,12 +8,23 @@ const CULINARY_CACHE_TTL = 60;
 
 class CulinaryService {
   static async getAll(query) {
-    const { page = 1, limit = 12, search, category, is_speciality, sortBy, sortOrder, lang: rawLang } = query;
+    const { page = 1, limit = 12, search, category, province_code, is_speciality, sortBy, sortOrder, lang: rawLang } = query;
     const lang = normalizeLang(rawLang);
-    const cacheKey = `culinary:list:${lang}:${JSON.stringify({ page, limit, search, category, is_speciality, sortBy, sortOrder })}`;
+    const cacheKey = [
+      'culinary:list',
+      lang,
+      `p${page}`,
+      `l${limit}`,
+      province_code || 'all',
+      category || 'all',
+      is_speciality ?? '',
+      search || '',
+      sortBy || 'created_at',
+      sortOrder || 'DESC',
+    ].join(':');
     const { rows, total } = await cacheOrFetch(
       cacheKey,
-      () => CulinaryRepository.findAll({ page, limit, search, category, is_speciality, sortBy, sortOrder, lang }),
+      () => CulinaryRepository.findAll({ page, limit, search, category, province_code, is_speciality, sortBy, sortOrder, lang }),
       CULINARY_CACHE_TTL,
     );
     return {

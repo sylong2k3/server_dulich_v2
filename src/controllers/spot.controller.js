@@ -6,6 +6,8 @@ class SpotController {
   // ==================== PUBLIC ====================
 
   static getAllSpots = asyncHandler(async (req, res) => {
+    console.log(req.query);
+
     const result = await spotService.getAllSpots(req.query, { user: req.user });
     return OK(res, 'Lấy danh sách điểm du lịch thành công', result);
   });
@@ -38,8 +40,8 @@ class SpotController {
   });
 
   static getFeaturedSpots = asyncHandler(async (req, res) => {
-    const { limit, category_id, category_ids, lang } = req.query;
-    const spots = await spotService.getFeaturedSpots(limit, category_id, lang, category_ids);
+    const { limit, category_id, lang } = req.query;
+    const spots = await spotService.getFeaturedSpots(limit, category_id, lang);
     return OK(res, 'Lấy danh sách điểm nổi bật thành công', { spots });
   });
 

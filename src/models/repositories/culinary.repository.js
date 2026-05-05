@@ -2,7 +2,7 @@ const db = require('../../configs/database');
 const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
 class CulinaryRepository {
-    static async findAll({ page = 1, limit = 12, search, category, is_speciality, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
+    static async findAll({ page = 1, limit = 12, search, category, province_code, is_speciality, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
         const lang = normalizeLang(rawLang);
         const offset = (page - 1) * limit;
         const params = [];
@@ -10,6 +10,7 @@ class CulinaryRepository {
         let idx = 1;
 
         if (category) { conditions.push(`c.category = $${idx++}`); params.push(category); }
+        if (province_code) { conditions.push(`c.province_code = $${idx++}`); params.push(province_code); }
         if (is_speciality !== undefined) { conditions.push(`c.is_speciality = $${idx++}`); params.push(is_speciality); }
         if (search) {
             conditions.push(`(c.name_vi ILIKE $${idx} OR c.name_en ILIKE $${idx} OR c.description_vi ILIKE $${idx})`);

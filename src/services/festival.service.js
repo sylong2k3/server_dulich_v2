@@ -11,7 +11,7 @@ class FestivalService {
    * Public list — chỉ trả lễ hội đã publish, có cache 60s.
    */
   static async getAll(query) {
-    const { page = 1, limit = 12, search, festival_type, upcoming, sortBy, sortOrder, lang: rawLang } = query;
+    const { page = 1, limit = 12, search, festival_type, upcoming, province_code, sortBy, sortOrder, lang: rawLang } = query;
     const lang = normalizeLang(rawLang);
     // Normalize cache key — chỉ dùng các filter ảnh hưởng đến kết quả
     const cacheKey = [
@@ -19,6 +19,7 @@ class FestivalService {
       lang,
       `p${page}`,
       `l${limit}`,
+      province_code || 'all',
       festival_type || 'all',
       upcoming ? 'upcoming' : 'all',
       search || '',

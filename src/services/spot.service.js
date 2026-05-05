@@ -46,7 +46,6 @@ class SpotService {
     const page = Math.max(1, parseInt(options.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(options.limit, 10) || 20));
     const effectiveOptions = this._applyListScope({ ...options, page, limit }, viewer?.user);
-    // Normalize cache key — chỉ dùng các filter ảnh hưởng đến kết quả, tránh stringify toàn object
     const cacheKey = [
       'spots:list',
       effectiveOptions.lang || 'vi',
@@ -57,6 +56,11 @@ class SpotService {
       effectiveOptions.category_id || 'all',
       effectiveOptions.created_by || 'any',
       effectiveOptions.search || '',
+      effectiveOptions.lat ?? '',
+      effectiveOptions.lng ?? '',
+      effectiveOptions.radius_km ?? '',
+      effectiveOptions.is_featured ?? '',
+      effectiveOptions.rating_min || '',
       effectiveOptions.sortBy || 'created_at',
       effectiveOptions.sortOrder || 'DESC',
     ].join(':');
@@ -92,6 +96,14 @@ class SpotService {
       effectiveOptions.province_code || 'all',
       effectiveOptions.category_id || 'all',
       effectiveOptions.created_by || 'any',
+      effectiveOptions.lat ?? '',
+      effectiveOptions.lng ?? '',
+      effectiveOptions.radius_km ?? '',
+      effectiveOptions.search || '',
+      effectiveOptions.is_featured ?? '',
+      effectiveOptions.rating_min || '',
+      effectiveOptions.sortBy || '',
+      effectiveOptions.sortOrder || 'DESC',
     ].join(':');
     return cacheOrFetch(cacheKey, async () => {
       const { spots, totalCount } = await SpotRepository.getAllSpots(effectiveOptions);
@@ -120,15 +132,11 @@ class SpotService {
     return cacheOrFetch(cacheKey, () => SpotRepository.getGeoJSON(options), 300);
   }
 
-  async getFeaturedSpots(limit = 12, categoryId, lang = 'vi', categoryIds) {
-    // Xây cache key rõ ràng: ưu tiên hiển thị categoryIds nếu có
-    const catKey = Array.isArray(categoryIds) && categoryIds.length > 0
-      ? `cats[${categoryIds.join(',')}]`
-      : categoryId
-        ? `cat${categoryId}`
-        : 'all';
-    const cacheKey = `spots:featured:${lang}:${catKey}`;
-    return cacheOrFetch(cacheKey, () => SpotRepository.getFeaturedSpots(limit, categoryId, lang, categoryIds), 300);
+  async getFeaturedSpots(limit = 12, categoryId, lang = 'vi') {
+    const cacheKey = categoryId
+      ? `spots:featured:${lang}:cat${categoryId}`
+      : `spots:featured:${lang}:all`;
+    return cacheOrFetch(cacheKey, () => SpotRepository.getFeaturedSpots(limit, categoryId, lang), 300);
   }
 
   /**
