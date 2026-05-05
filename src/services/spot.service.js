@@ -120,9 +120,15 @@ class SpotService {
     return cacheOrFetch(cacheKey, () => SpotRepository.getGeoJSON(options), 300);
   }
 
-  async getFeaturedSpots(limit = 12, categoryIds, lang = 'vi') {
-    const cacheKey = categoryIds ? `spots:featured:${lang}:cats${JSON.stringify(categoryIds)}` : `spots:featured:${lang}`;
-    return cacheOrFetch(cacheKey, () => SpotRepository.getFeaturedSpots(limit, categoryIds, lang), 300);
+  async getFeaturedSpots(limit = 12, categoryId, lang = 'vi', categoryIds) {
+    // Xây cache key rõ ràng: ưu tiên hiển thị categoryIds nếu có
+    const catKey = Array.isArray(categoryIds) && categoryIds.length > 0
+      ? `cats[${categoryIds.join(',')}]`
+      : categoryId
+        ? `cat${categoryId}`
+        : 'all';
+    const cacheKey = `spots:featured:${lang}:${catKey}`;
+    return cacheOrFetch(cacheKey, () => SpotRepository.getFeaturedSpots(limit, categoryId, lang, categoryIds), 300);
   }
 
   /**

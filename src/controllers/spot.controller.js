@@ -38,8 +38,8 @@ class SpotController {
   });
 
   static getFeaturedSpots = asyncHandler(async (req, res) => {
-    const { limit, category_ids, lang } = req.query;
-    const spots = await spotService.getFeaturedSpots(limit, category_ids, lang);
+    const { limit, category_id, category_ids, lang } = req.query;
+    const spots = await spotService.getFeaturedSpots(limit, category_id, lang, category_ids);
     return OK(res, 'Lấy danh sách điểm nổi bật thành công', { spots });
   });
 

@@ -32,6 +32,21 @@ const spotListQueryFields = {
     lang: Joi.string().valid('vi', 'en').default('vi'),
     search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).optional(),
     category_id: Joi.number().integer().min(1).optional(),
+    category_ids: Joi.string()
+        .custom((value, helpers) => {
+            try {
+                const parsed = JSON.parse(value);
+                if (!Array.isArray(parsed) || parsed.length === 0)
+                    return helpers.error('any.invalid');
+                const nums = parsed.map(Number);
+                if (nums.some((n) => !Number.isInteger(n) || n <= 0))
+                    return helpers.error('any.invalid');
+                return nums;
+            } catch {
+                return helpers.error('any.invalid');
+            }
+        })
+        .optional(),
     province_code: provinceCodeField(),
     status: Joi.string().valid(...SPOT_STATUS).optional(),
     is_featured: Joi.boolean().optional(),
@@ -95,6 +110,21 @@ const featuredQuerySchema = Joi.object({
     lang: Joi.string().valid('vi', 'en').default('vi'),
     limit: Joi.number().integer().min(1).max(50).default(12),
     category_id: Joi.number().integer().min(1).optional(),
+    category_ids: Joi.string()
+        .custom((value, helpers) => {
+            try {
+                const parsed = JSON.parse(value);
+                if (!Array.isArray(parsed) || parsed.length === 0)
+                    return helpers.error('any.invalid');
+                const nums = parsed.map(Number);
+                if (nums.some((n) => !Number.isInteger(n) || n <= 0))
+                    return helpers.error('any.invalid');
+                return nums;
+            } catch {
+                return helpers.error('any.invalid');
+            }
+        })
+        .optional(),
 });
 
 const mediaTypeQuerySchema = Joi.object({

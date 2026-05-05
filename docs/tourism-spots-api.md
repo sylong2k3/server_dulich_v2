@@ -1,33 +1,39 @@
-# Tourism Spots API
+# API Điểm Du Lịch (Tourism Spots)
 
-Tai lieu nay mo ta phan API diem du lich sau khi tach route cho man quan tri, view danh sach va ban do.
+Tài liệu mô tả các endpoint API quản lý và tra cứu điểm du lịch, bao gồm danh sách công khai, trang quản trị nội bộ và bản đồ.
 
-Base path:
+**Base path:**
 
 ```http
 /api/v1/spots
 ```
 
-## Muc tieu
+---
 
-- Tach API danh sach diem du lich cho 3 nhu cau rieng:
-  - View/list public.
-  - Admin/quan tri noi bo.
-  - Ban do co the truyen GPS de loc va sap xep theo khoang cach.
-- Bo `district_id` vi bang `tourism_spots` khong co cot district.
-- Ho tro `lang=vi|en` de frontend lay field hien thi theo ngon ngu.
-- Ap dung scope du lieu theo role:
-  - Public va `tourist`: chi xem diem da duyet, `status = active`.
-  - `system_admin`, `ministry_manager`: xem toan bo theo filter truyen vao.
-  - `department_manager`: chi xem du lieu theo `province_code`.
-  - `spot_operator`, `travel_company`, `service_provider`: chi xem du lieu do chinh user tao, theo `created_by = req.user.id`.
+## Mục tiêu thiết kế
 
-## Bang co cot ngon ngu trong DB
+- Tách API danh sách điểm du lịch cho **3 nhu cầu riêng biệt**:
+  - Danh sách/thẻ công khai (public list/card).
+  - Quản trị nội bộ (admin/backoffice).
+  - Bản đồ — hỗ trợ lọc theo GPS và sắp xếp theo khoảng cách.
+- Hỗ trợ `lang=vi|en` để frontend lấy field hiển thị theo ngôn ngữ.
+- Áp dụng **scope dữ liệu** tự động theo role:
 
-Da kiem tra `information_schema.columns`, cac bang/view hien co cot `_vi`/`_en`:
+| Role | Dữ liệu được truy cập |
+|---|---|
+| `tourist` / không token | Chỉ điểm đã duyệt (`status = active`) |
+| `system_admin`, `ministry_manager` | Toàn bộ theo filter truyền vào |
+| `department_manager` | Chỉ theo `province_code` của Sở |
+| `spot_operator`, `travel_company`, `service_provider` | Chỉ điểm do chính user tạo (`created_by = user.id`) |
 
-| Schema | Bang/View | Cot ngon ngu |
-| --- | --- | --- |
+---
+
+## Bảng có cột ngôn ngữ trong DB
+
+Đã kiểm tra `information_schema.columns`, các bảng/view hiện có cột `_vi` / `_en`:
+
+| Schema | Bảng/View | Cột ngôn ngữ |
+|---|---|---|
 | `auth` | `permissions` | `name_vi` |
 | `auth` | `roles` | `name_vi`, `name_en` |
 | `public` | `businesses` | `description_vi`, `description_en`, `address_vi` |
@@ -53,61 +59,66 @@ Da kiem tra `information_schema.columns`, cac bang/view hien co cot `_vi`/`_en`:
 | `vn_units` | `provinces` | `name_en`, `full_name_en` |
 | `vn_units` | `wards` | `name_en`, `full_name_en` |
 
+---
+
 ## Endpoints
 
-### 1. Public list/view
+### 1. Danh sách công khai
 
 ```http
 GET /api/v1/spots
 ```
 
-Dung cho man danh sach/card public. Endpoint nay cho phep auth tuy chon.
+Dùng cho màn hình danh sách / thẻ điểm du lịch công khai. Cho phép xác thực tùy chọn (`optionalAuth`).
 
-Neu khong co token hoac role la `tourist`, API luon ep:
+Nếu không có token hoặc role là `tourist`, API luôn ép:
 
-```js
+```
 status = 'active'
 ```
 
-Query params:
+**Query params:**
 
-| Param | Type | Ghi chu |
-| --- | --- | --- |
-| `lang` | string | `vi` hoac `en`, mac dinh `vi` |
-| `page` | number | Mac dinh `1` |
-| `limit` | number | Mac dinh `20`, toi da `100` |
-| `search` | string | Tim theo ten/mo ta |
-| `category_ids` | JSON array string | Vi du: `[1,2,3]` |
-| `province_code` | string | Ma tinh/thanh |
-| `status` | string | Chi co tac dung voi role duoc phep xem noi bo |
-| `is_featured` | boolean | Loc diem noi bat |
-| `rating_min` | number | Tu `0` den `5` |
-| `capacity` | boolean | Tra them thong tin suc chua hien tai |
+| Tham số | Kiểu | Mô tả |
+|---|---|---|
+| `lang` | string | `vi` hoặc `en`, mặc định `vi` |
+| `page` | number | Mặc định `1` |
+| `limit` | number | Mặc định `20`, tối đa `100` |
+| `search` | string | Tìm theo tên hoặc mô tả |
+| `category_id` | number | Lọc theo **1 danh mục** — số nguyên, VD: `?category_id=3` |
+| `category_ids` | string | Lọc theo **nhiều danh mục** — JSON array, VD: `?category_ids=[1,2,3]` |
+| `province_code` | string | Mã tỉnh/thành |
+| `status` | string | Chỉ có tác dụng với role được phép xem nội bộ |
+| `is_featured` | boolean | Lọc điểm nổi bật |
+| `rating_min` | number | Từ `0` đến `5` |
+| `capacity` | boolean | Trả thêm thông tin sức chứa hiện tại |
 | `sortBy` | string | `created_at`, `name`, `rating_avg`, `view_count`, `distance_m` |
-| `sortOrder` | string | `ASC` hoac `DESC` |
-| `lat` | number | Neu truyen GPS thi phai co ca `lat` va `lng` |
-| `lng` | number | Neu truyen GPS thi phai co ca `lat` va `lng` |
-| `radius_km` | number | Ban kinh loc GPS, `0.1` den `100` |
+| `sortOrder` | string | `ASC` hoặc `DESC` |
+| `lat` | number | Vĩ độ — bắt buộc đi kèm `lng` |
+| `lng` | number | Kinh độ — bắt buộc đi kèm `lat` |
+| `radius_km` | number | Bán kính lọc GPS, `0.1` đến `100` |
 
-Vi du:
+**Ví dụ:**
 
 ```http
 GET /api/v1/spots?page=1&limit=20&province_code=37
 ```
 
 ```http
-GET /api/v1/spots?lang=en&lat=20.25&lng=105.97&radius_km=10
+GET /api/v1/spots?lang=en&lat=20.25&lng=105.97&radius_km=10&category_id=3
 ```
 
-### 2. Admin list
+---
+
+### 2. Danh sách Admin (quản trị nội bộ)
 
 ```http
 GET /api/v1/spots/admin
 ```
 
-Dung cho man quan tri/backoffice.
+Dùng cho màn hình quản trị / backoffice. **Không cache** — admin cần thấy dữ liệu thay đổi ngay sau CRUD.
 
-Middleware:
+**Middleware yêu cầu:**
 
 ```js
 authenticateToken
@@ -122,105 +133,119 @@ requireRole([
 checkPermission('spots', 'read')
 ```
 
-`tourist` khong duoc goi route nay, du co permission `spots:read`.
+> `tourist` không được gọi route này dù có permission `spots:read`.
 
-Query params:
+**Query params:**
 
-| Param | Type | Ghi chu |
-| --- | --- | --- |
-| `lang` | string | `vi` hoac `en`, mac dinh `vi` |
-| `page` | number | Mac dinh `1` |
-| `limit` | number | Mac dinh `20`, toi da `100` |
-| `search` | string | Tim theo ten/mo ta |
-| `category_ids` | JSON array string | Vi du: `[1,2,3]` |
-| `province_code` | string | Bat buoc thuc te voi `department_manager` neu user chua co `province_code` |
+| Tham số | Kiểu | Mô tả |
+|---|---|---|
+| `lang` | string | `vi` hoặc `en`, mặc định `vi` |
+| `page` | number | Mặc định `1` |
+| `limit` | number | Mặc định `20`, tối đa `100` |
+| `search` | string | Tìm theo tên hoặc mô tả |
+| `category_id` | number | Lọc theo **1 danh mục** — số nguyên, VD: `?category_id=3` |
+| `category_ids` | string | Lọc theo **nhiều danh mục** — JSON array, VD: `?category_ids=[1,2,3]` |
+| `province_code` | string | Bắt buộc thực tế với `department_manager` |
 | `status` | string | `active`, `inactive`, `pending` |
-| `is_featured` | boolean | Loc diem noi bat |
-| `rating_min` | number | Tu `0` den `5` |
-| `capacity` | boolean | Tra them thong tin suc chua hien tai |
+| `is_featured` | boolean | Lọc điểm nổi bật |
+| `rating_min` | number | Từ `0` đến `5` |
+| `capacity` | boolean | Trả thêm thông tin sức chứa hiện tại |
 | `sortBy` | string | `created_at`, `name`, `rating_avg`, `view_count` |
-| `sortOrder` | string | `ASC` hoac `DESC` |
+| `sortOrder` | string | `ASC` hoặc `DESC` |
 
-Khong nhan `lat`, `lng`, `radius_km`. Neu client gui thua, validator se strip bo.
+> Không nhận `lat`, `lng`, `radius_km`. Nếu client gửi thừa, validator sẽ strip bỏ.
 
-Vi du:
+**Ví dụ:**
 
 ```http
 GET /api/v1/spots/admin?lang=vi&province_code=37&status=pending&page=1&limit=20
 ```
 
-Scope du lieu:
+**Scope dữ liệu theo role:**
 
-| Role | Du lieu tra ve |
-| --- | --- |
-| `system_admin` | Toan bo theo filter |
-| `ministry_manager` | Toan bo theo filter |
-| `department_manager` | Chi theo `province_code` |
-| `spot_operator` | Chi record co `created_by = req.user.id` |
-| `travel_company` | Chi record co `created_by = req.user.id` |
-| `service_provider` | Chi record co `created_by = req.user.id` |
+| Role | Dữ liệu trả về |
+|---|---|
+| `system_admin` | Toàn bộ theo filter |
+| `ministry_manager` | Toàn bộ theo filter |
+| `department_manager` | Chỉ theo `province_code` |
+| `spot_operator` | Chỉ record có `created_by = user.id` |
+| `travel_company` | Chỉ record có `created_by = user.id` |
+| `service_provider` | Chỉ record có `created_by = user.id` |
 
-### 3. Map list
+---
+
+### 3. Danh sách Bản đồ
 
 ```http
 GET /api/v1/spots/map
 ```
 
-Dung cho man ban do. Endpoint nay cho phep auth tuy chon.
+Dùng cho màn hình bản đồ. Cho phép xác thực tùy chọn. Giới hạn tối đa `1000` records.
 
-Query params:
+**Query params:**
 
-| Param | Type | Ghi chu |
-| --- | --- | --- |
-| `lang` | string | `vi` hoac `en`, mac dinh `vi` |
-| `page` | number | Mac dinh `1` |
-| `limit` | number | Mac dinh `500`, toi da `1000` |
-| `search` | string | Tim theo ten/mo ta |
-| `category_ids` | JSON array string | Vi du: `[1,2,3]` |
-| `province_code` | string | Ma tinh/thanh |
-| `status` | string | Chi co tac dung voi role duoc phep xem noi bo |
-| `is_featured` | boolean | Loc diem noi bat |
-| `rating_min` | number | Tu `0` den `5` |
-| `capacity` | boolean | Tra them thong tin suc chua hien tai |
+| Tham số | Kiểu | Mô tả |
+|---|---|---|
+| `lang` | string | `vi` hoặc `en`, mặc định `vi` |
+| `page` | number | Mặc định `1` |
+| `limit` | number | Mặc định `500`, tối đa `1000` |
+| `search` | string | Tìm theo tên hoặc mô tả |
+| `category_id` | number | ID danh mục điểm du lịch (số nguyên) |
+| `province_code` | string | Mã tỉnh/thành |
+| `status` | string | Chỉ có tác dụng với role được phép xem nội bộ |
+| `is_featured` | boolean | Lọc điểm nổi bật |
+| `rating_min` | number | Từ `0` đến `5` |
+| `capacity` | boolean | Trả thêm thông tin sức chứa hiện tại |
 | `sortBy` | string | `created_at`, `name`, `rating_avg`, `view_count`, `distance_m` |
-| `sortOrder` | string | `ASC` hoac `DESC` |
-| `lat` | number | Neu truyen GPS thi phai co ca `lat` va `lng` |
-| `lng` | number | Neu truyen GPS thi phai co ca `lat` va `lng` |
-| `radius_km` | number | Ban kinh loc GPS, `0.1` den `100` |
+| `sortOrder` | string | `ASC` hoặc `DESC` |
+| `lat` | number | Vĩ độ — bắt buộc đi kèm `lng` |
+| `lng` | number | Kinh độ — bắt buộc đi kèm `lat` |
+| `radius_km` | number | Bán kính lọc GPS, `0.1` đến `100` |
 
-Neu co `lat` va `lng`:
+Khi có `lat` và `lng`:
+- API lọc điểm trong bán kính `radius_km`.
+- Response có thêm trường `distance_m`.
+- Nếu không truyền `sortBy`, API mặc định sắp xếp `distance_m ASC`.
 
-- API loc diem trong ban kinh `radius_km`.
-- Response co them `distance_m`.
-- Neu khong truyen `sortBy`, API mac dinh sap xep `distance_m ASC`.
-
-Vi du:
+**Ví dụ:**
 
 ```http
 GET /api/v1/spots/map?lang=en&lat=20.25&lng=105.97&radius_km=10&province_code=37
 ```
 
-### 4. Detail by slug
+---
+
+### 4. Chi tiết theo slug
 
 ```http
 GET /api/v1/spots/:slug
 ```
 
-Query params:
+**Query params:**
 
-| Param | Type | Ghi chu |
-| --- | --- | --- |
-| `lang` | string | `vi` hoac `en`, mac dinh `vi` |
+| Tham số | Kiểu | Mô tả |
+|---|---|---|
+| `lang` | string | `vi` hoặc `en`, mặc định `vi` |
 
-Vi du:
+**Ví dụ:**
 
 ```http
 GET /api/v1/spots/trang-an?lang=en
 ```
 
-## Response chung
+---
 
-Dang response:
+### 5. Chi tiết Admin theo ID
+
+```http
+GET /api/v1/spots/admin/:id
+```
+
+Lấy toàn bộ thông tin chi tiết một điểm bất kỳ (kể cả chưa duyệt). Yêu cầu quyền `spots:read`.
+
+---
+
+## Cấu trúc Response
 
 ```json
 {
@@ -228,9 +253,9 @@ Dang response:
     {
       "id": "uuid",
       "slug": "trang-an",
-      "name": "Trang An",
-      "description": "...",
-      "address": "...",
+      "name": "Tràng An",
+      "description": "Mô tả theo ngôn ngữ yêu cầu...",
+      "address": "Địa chỉ theo ngôn ngữ yêu cầu...",
       "rating_avg": "4.8",
       "rating_count": 120,
       "is_featured": true,
@@ -252,11 +277,13 @@ Dang response:
       "longitude": 105.97,
       "latitude": 20.25,
       "distance_m": 1234.56,
-      "category_id": 1,
-      "category_name": "Khu du lich",
-      "province_name": "Ninh Binh",
-      "commune_name": "...",
-      "primary_image": "/uploads/images/..."
+      "category_id": 3,
+      "category_name": "Khu du lịch sinh thái",
+      "category_parent_id": 1,
+      "category_parent_name": "Thiên nhiên",
+      "province_name": "Ninh Bình",
+      "commune_name": "Xã Trường Yên",
+      "primary_image": "/uploads/images/trang-an.jpg"
     }
   ],
   "pagination": {
@@ -268,19 +295,30 @@ Dang response:
 }
 ```
 
-`distance_m` chi co khi request co `lat` va `lng`.
+> `distance_m` chỉ có khi request truyền `lat` và `lng`.
 
-Field theo ngon ngu:
+**Các field đa ngôn ngữ:**
 
-- `name`: lay tu `name_vi` hoac `name_en` theo `lang`.
-- `description`: lay tu `description_vi` hoac `description_en` theo `lang`.
-- `address`: lay tu `address_vi` hoac `address_en` theo `lang`.
-- `category_name`, `category_parent_name`, `province_name`, `commune_name`: cung duoc localize theo `lang` neu bang co cot tieng Anh.
-- Response doc cua `tourism_spots` khong tra cac field song ngu tho nhu `name_vi`, `name_en`, `description_vi`, `description_en`, `address_vi`, `address_en`.
+| Field response | Nguồn trong DB |
+|---|---|
+| `name` | `name_vi` hoặc `name_en` theo `lang` |
+| `description` | `description_vi` hoặc `description_en` theo `lang` |
+| `address` | `address_vi` hoặc `address_en` theo `lang` |
+| `category_name` | `spot_categories.name_vi/name_en` |
+| `province_name` | `provinces.name/name_en` |
+| `commune_name` | `wards.name/name_en` |
 
-## Luu y BE
+> Response **không** trả các field gốc song ngữ như `name_vi`, `name_en`, `description_vi`, `description_en`, `address_vi`, `address_en`.
 
-- Khong dung `district_id` cho tourism spots.
-- Role `department_manager` hien chua co `province_code` trong bang `auth.users`, nen frontend/backend caller can truyen `province_code` khi goi route admin/map cho So. Neu sau nay them `province_code` vao user profile, service da co san fallback de doc tu `user.province_code`.
-- Route cu `/spots/nearby` van giu de tuong thich, nhung man ban do nen dung `/spots/map`.
-- Cac route moi dung chung repository `SpotRepository.getAllSpots`, nen can can than khi sua select/filter de khong pha 3 man hinh.
+---
+
+## Lưu ý dành cho Backend
+
+- **Không dùng `district_id`** cho `tourism_spots` — bảng không có cột này.
+- **Lọc theo danh mục** hỗ trợ 2 tham số song song:
+  - `category_id` (number): lọc 1 danh mục — `?category_id=3`
+  - `category_ids` (JSON array string): lọc nhiều danh mục — `?category_ids=[1,2,3]`
+  - Nếu truyền cả 2, `category_ids` được ưu tiên.
+- Role `department_manager` hiện chưa có `province_code` trong bảng `users`, nên frontend/BE caller cần truyền `province_code` khi gọi route admin/map cho Sở. Nếu sau này thêm `province_code` vào user profile, service đã có sẵn fallback để đọc từ `user.province_code`.
+- Route cũ `/spots/nearby` vẫn giữ để tương thích ngược, nhưng màn hình bản đồ nên dùng `/spots/map`.
+- Các route dùng chung `SpotRepository.getAllSpots` — cần cẩn thận khi sửa select/filter để không ảnh hưởng cả 3 màn hình (public, admin, map).

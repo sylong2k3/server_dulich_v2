@@ -21,6 +21,7 @@ class SpotRepository {
       page = 1,
       limit = 20,
       category_id,
+      category_ids,
       province_code,
       status = 'active',
       is_featured,
@@ -47,7 +48,12 @@ class SpotRepository {
       paramCount++;
     }
 
-    if (category_id !== undefined && category_id !== null) {
+    // category_ids (array) ưu tiên hơn category_id (đơn)
+    if (Array.isArray(category_ids) && category_ids.length > 0) {
+      whereClause += ` AND ts.category_id = ANY($${paramCount}::int[])`;
+      values.push(category_ids.map(Number));
+      paramCount++;
+    } else if (category_id !== undefined && category_id !== null) {
       whereClause += ` AND ts.category_id = $${paramCount}`;
       values.push(Number(category_id));
       paramCount++;
@@ -296,11 +302,15 @@ class SpotRepository {
   /**
    * Spots nổi bật
    */
-  static async getFeaturedSpots(limit = 12, categoryId, rawLang = 'vi') {
+  static async getFeaturedSpots(limit = 12, categoryId, rawLang = 'vi', categoryIds) {
     const lang = normalizeLang(rawLang);
     const params = [limit];
     let categoryFilter = '';
-    if (categoryId !== undefined && categoryId !== null) {
+    // category_ids (array) ưu tiên hơn category_id (đơn)
+    if (Array.isArray(categoryIds) && categoryIds.length > 0) {
+      params.push(categoryIds.map(Number));
+      categoryFilter = `AND ts.category_id = ANY($${params.length}::int[])`;
+    } else if (categoryId !== undefined && categoryId !== null) {
       params.push(Number(categoryId));
       categoryFilter = `AND ts.category_id = $${params.length}`;
     }
