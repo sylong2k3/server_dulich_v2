@@ -1,5 +1,4 @@
 const { query } = require('../../configs/database');
-const { Api400Error } = require('../../core/error.response');
 const { create, updateById } = require('../../utils/database');
 const {
   dWithinSQL,
@@ -10,51 +9,6 @@ const {
 } = require('../../utils/geo.utils');
 const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
-const parsePositiveIntList = (value, fieldName) => {
-  if (value === undefined || value === null) return undefined;
-
-  const fail = () => {
-    throw new Api400Error(`${fieldName} không hợp lệ`);
-  };
-
-  const expand = (input) => {
-    if (Array.isArray(input)) return input.flatMap(expand);
-
-    if (typeof input === 'string') {
-      const trimmed = input.trim();
-      if (!trimmed) return [];
-
-      if (trimmed.startsWith('[')) {
-        try {
-          return expand(JSON.parse(trimmed));
-        } catch {
-          fail();
-        }
-      }
-
-      return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
-    }
-
-    return [input];
-  };
-
-  const ids = expand(value).map((item) => {
-    if (typeof item === 'number' && Number.isInteger(item) && item > 0) {
-      return item;
-    }
-
-    if (typeof item === 'string' && /^\d+$/.test(item)) {
-      const id = Number(item);
-      if (Number.isSafeInteger(id) && id > 0) return id;
-    }
-
-    fail();
-  });
-
-  if (!ids.length) fail();
-
-  return [...new Set(ids)];
-};
 
 class SpotRepository {
   static tableName = 'tourism_spots';
@@ -66,7 +20,7 @@ class SpotRepository {
     const {
       page = 1,
       limit = 20,
-      category_ids,
+      category_id,
       province_code,
       status = 'active',
       is_featured,
@@ -93,10 +47,9 @@ class SpotRepository {
       paramCount++;
     }
 
-    if (category_ids !== undefined && category_ids !== null) {
-      const ids = parsePositiveIntList(category_ids, 'category_ids');
-      whereClause += ` AND ts.category_id = ANY($${paramCount}::int[])`;
-      values.push(ids);
+    if (category_id !== undefined && category_id !== null) {
+      whereClause += ` AND ts.category_id = $${paramCount}`;
+      values.push(Number(category_id));
       paramCount++;
     }
 
@@ -343,14 +296,13 @@ class SpotRepository {
   /**
    * Spots nổi bật
    */
-  static async getFeaturedSpots(limit = 12, categoryIds, rawLang = 'vi') {
+  static async getFeaturedSpots(limit = 12, categoryId, rawLang = 'vi') {
     const lang = normalizeLang(rawLang);
     const params = [limit];
     let categoryFilter = '';
-    if (categoryIds !== undefined && categoryIds !== null) {
-      const ids = parsePositiveIntList(categoryIds, 'category_ids');
-      params.push(ids);
-      categoryFilter = `AND ts.category_id = ANY($${params.length}::int[])`;
+    if (categoryId !== undefined && categoryId !== null) {
+      params.push(Number(categoryId));
+      categoryFilter = `AND ts.category_id = $${params.length}`;
     }
     const sql = `
       SELECT ts.id, ts.slug,

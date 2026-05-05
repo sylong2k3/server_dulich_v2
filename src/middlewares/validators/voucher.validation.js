@@ -17,6 +17,20 @@ const voucherQuerySchema = Joi.object({
     is_active: Joi.boolean().optional(),
 });
 
+// Admin query — xem voucher mọi doanh nghiệp, filter mở rộng
+const voucherAdminQuerySchema = Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(20),
+    business_id: uuidSchema.optional(),
+    is_active: Joi.boolean().optional(),
+    expired: Joi.boolean().optional(),
+    search: Joi.string().trim().max(100).optional(),
+});
+
+const voucherIdParamSchema = Joi.object({
+    voucherId: uuidSchema.required(),
+});
+
 const createVoucherSchema = Joi.object({
     title_vi: Joi.string().trim().min(2).max(255).required(),
     description_vi: Joi.string().trim().optional().allow('', null),
@@ -67,7 +81,9 @@ const nearbyVoucherQuerySchema = Joi.object({
 module.exports = {
     businessVoucherParamSchema,
     voucherItemParamSchema,
+    voucherIdParamSchema,
     voucherQuerySchema,
+    voucherAdminQuerySchema,
     createVoucherSchema,
     updateVoucherSchema,
     validateVoucherSchema,

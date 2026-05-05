@@ -24,6 +24,44 @@ class VoucherRepository {
         return { rows, total: parseInt(rows[0]?.total_count || 0) };
     }
 
+    /**
+     * Admin: list voucher của TẤT CẢ doanh nghiệp — không filter theo owner.
+     * Filter mở rộng: business_id, is_active, expired (đã hết hạn), search code/title.
+     */
+    static async findAllAdmin({ page = 1, limit = 20, business_id, is_active, expired, search } = {}) {
+        const offset = (page - 1) * limit;
+        const conditions = [];
+        const params = [];
+        let idx = 1;
+
+        if (business_id) { conditions.push(`v.business_id = $${idx++}`); params.push(business_id); }
+        if (is_active !== undefined) { conditions.push(`v.is_active = $${idx++}`); params.push(is_active); }
+        if (expired === true) { conditions.push(`v.valid_until < NOW()`); }
+        else if (expired === false) { conditions.push(`(v.valid_until IS NULL OR v.valid_until >= NOW())`); }
+        if (search) {
+            conditions.push(`(v.code ILIKE $${idx} OR v.title_vi ILIKE $${idx})`);
+            params.push(`%${search}%`);
+            idx++;
+        }
+
+        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+        const sql = `
+            SELECT v.*,
+                ST_X(v.geo_target_geom::geometry) AS geo_lng,
+                ST_Y(v.geo_target_geom::geometry) AS geo_lat,
+                b.business_name,
+                COUNT(*) OVER() AS total_count
+            FROM vouchers v
+            JOIN businesses b ON b.id = v.business_id
+            ${where}
+            ORDER BY v.created_at DESC
+            LIMIT $${idx++} OFFSET $${idx}
+        `;
+        params.push(limit, offset);
+        const { rows } = await query(sql, params);
+        return { rows, total: parseInt(rows[0]?.total_count || 0) };
+    }
+
     static async findById(id) {
         const sql = `
             SELECT v.*,

@@ -71,6 +71,18 @@ class BusinessController {
         return OK(res, 'Danh sách voucher', result);
     });
 
+    // ==================== ADMIN VOUCHERS — không cache ====================
+
+    static getAdminVouchers = asyncHandler(async (req, res) => {
+        const result = await VoucherService.getAdminAll(req.query);
+        return OK(res, 'Danh sách voucher (admin)', result);
+    });
+
+    static getAdminVoucherById = asyncHandler(async (req, res) => {
+        const voucher = await VoucherService.getAdminById(req.params.voucherId);
+        return OK(res, 'Chi tiết voucher (admin)', { voucher });
+    });
+
     static createVoucher = asyncHandler(async (req, res) => {
         const voucher = await VoucherService.create(req.params.businessId, req.body, req.user.id);
         return CREATED(res, 'Tạo voucher thành công', { voucher });

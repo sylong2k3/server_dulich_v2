@@ -370,7 +370,7 @@ const HANDLERS = {
         page: 1,
         limit,
         search: keyword,
-        category_ids: category_id,
+        category_id: category_id,
         province_code,
         rating_min,
         is_featured,

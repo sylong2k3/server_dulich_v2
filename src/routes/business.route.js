@@ -17,7 +17,9 @@ const {
 const {
     businessVoucherParamSchema,
     voucherItemParamSchema,
+    voucherIdParamSchema,
     voucherQuerySchema,
+    voucherAdminQuerySchema,
     createVoucherSchema,
     updateVoucherSchema,
     validateVoucherSchema,
@@ -42,6 +44,24 @@ router.get('/public', validateQuery(businessQuerySchema), BusinessController.get
 router.get('/vouchers/nearby', validateQuery(nearbyVoucherQuerySchema), BusinessController.getNearbyVouchers);
 // ROUTE: POST /vouchers/validate - Kiểm tra tính hợp lệ doanh nghiệp du lịch. Xử lý bởi BusinessController.validateVoucher. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.
 router.post('/vouchers/validate', validateBody(validateVoucherSchema), BusinessController.validateVoucher);
+
+// ==================== ADMIN VOUCHERS — không cache, xem tất cả ====================
+// ROUTE: GET /vouchers/admin - Danh sách voucher mọi DN (admin/sở/bộ).
+router.get(
+    '/vouchers/admin',
+    authenticateToken,
+    requireRole(BUSINESS_REVIEWER_ROLES),
+    validateQuery(voucherAdminQuerySchema),
+    BusinessController.getAdminVouchers
+);
+// ROUTE: GET /vouchers/admin/:voucherId - Chi tiết voucher (admin).
+router.get(
+    '/vouchers/admin/:voucherId',
+    authenticateToken,
+    requireRole(BUSINESS_REVIEWER_ROLES),
+    validateParams(voucherIdParamSchema),
+    BusinessController.getAdminVoucherById
+);
 
 // ==================== NV-38: Đăng ký doanh nghiệp ====================
 // Nhóm đơn vị du lịch được đăng ký doanh nghiệp

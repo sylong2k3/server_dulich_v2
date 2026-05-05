@@ -28,6 +28,32 @@ class VoucherService {
         };
     }
 
+    /**
+     * Admin: xem voucher của tất cả doanh nghiệp — KHÔNG cache.
+     * Dùng cho dashboard quản lý cấp tỉnh/bộ.
+     */
+    async getAdminAll(queryParams = {}) {
+        const page = +queryParams.page || 1;
+        const limit = +queryParams.limit || 20;
+        const { rows, total } = await VoucherRepository.findAllAdmin({ ...queryParams, page, limit });
+        return {
+            items: rows.map(({ total_count, ...v }) => v),
+            pagination: {
+                page, limit, total,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+
+    /**
+     * Admin: chi tiết một voucher bất kỳ — KHÔNG cache, không cần là owner.
+     */
+    async getAdminById(voucherId) {
+        const voucher = await VoucherRepository.findById(voucherId);
+        if (!voucher) throw new Api404Error('Không tìm thấy voucher');
+        return voucher;
+    }
+
     async create(businessId, data, userId) {
         await this._assertOwner(businessId, userId);
         try {
