@@ -29,9 +29,11 @@ router.get(
 // ==================== PUBLIC ====================
 // ROUTE: GET / - Lấy danh sách sản phẩm OCOP public. Xử lý bởi OcopController.getAll. Truy cập: optional auth; khách chỉ thấy is_active=true.
 router.get('/', optionalAuth, validateQuery(ocopQuerySchema), OcopController.getAll);
-// ROUTE: GET /categories - Trưy vấn sản phẩm OCOP. Xử lý bởi OcopController.getCategories. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.
+// ROUTE: GET /categories - Truy vấn danh mục OCOP.
 router.get('/categories', OcopController.getCategories);
-// ROUTE: GET /:id - Lấy chi tiết theo ID sản phẩm OCOP. Xử lý bởi OcopController.getById. Truy cập: optional auth; khách chỉ thấy is_active=true.
+// ROUTE: GET /me - Danh sách sản phẩm OCOP của doanh nghiệp tôi (phải đặt trước /:id).
+router.get('/me', authenticateToken, validateQuery(ocopQuerySchema), OcopController.getMy);
+// ROUTE: GET /:id - Lấy chi tiết theo ID sản phẩm OCOP. Truy cập: optional auth; khách chỉ thấy is_active=true.
 router.get('/:id', optionalAuth, validateParams(uuidParamSchema), OcopController.getById);
 
 // ROUTE: POST / - Tạo mới sản phẩm OCOP. Xử lý bởi OcopController.create. Truy cập: yêu cầu đăng nhập, cần quyền ocop:create.

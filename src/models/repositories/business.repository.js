@@ -1,9 +1,11 @@
 const db = require('../../configs/database');
+const { normalizeLang, localizedSQL } = require('../../utils/i18n.utils');
 
 class BusinessRepository {
   // ==================== BUSINESSES ====================
 
-  static async findAll({ page = 1, limit = 10, search, status, business_type, province_code, ward_code, sortBy = 'created_at', sortOrder = 'DESC' }) {
+  static async findAll({ page = 1, limit = 10, search, status, business_type, province_code, ward_code, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
+    const lang = normalizeLang(rawLang);
     const offset = (page - 1) * limit;
     const params = [];
     const conditions = [];
@@ -27,7 +29,8 @@ class BusinessRepository {
     const sql = `
       SELECT b.id, b.owner_id, b.province_code, b.ward_code,
              b.business_name, b.business_code, b.tax_id, b.license_number,
-             b.business_type, b.description_vi, b.description_en,
+             b.business_type,
+             ${localizedSQL(lang, 'b.description_vi', 'b.description_en', 'description')},
              b.logo_url, b.phone, b.email, b.website, b.address_vi,
              ST_AsGeoJSON(b.geom)::json AS geom,
              b.status, b.rating_avg, b.rating_count,
@@ -45,9 +48,18 @@ class BusinessRepository {
     return { rows: result.rows, total: parseInt(result.rows[0]?.total_count || 0) };
   }
 
-  static async findById(id) {
+  static async findById(id, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const sql = `
-      SELECT b.*, ST_AsGeoJSON(b.geom)::json AS geom,
+      SELECT b.id, b.owner_id, b.province_code, b.ward_code,
+             b.business_name, b.business_code, b.tax_id, b.license_number,
+             b.business_type,
+             ${localizedSQL(lang, 'b.description_vi', 'b.description_en', 'description')},
+             b.logo_url, b.phone, b.email, b.website, b.address_vi,
+             ST_AsGeoJSON(b.geom)::json AS geom,
+             b.status, b.rating_avg, b.rating_count,
+             b.approved_at, b.rejection_note,
+             b.created_at, b.updated_at,
              u.full_name AS owner_name, u.email AS owner_email,
              ap.full_name AS approved_by_name
       FROM businesses b
@@ -156,10 +168,16 @@ class BusinessRepository {
 
   // ==================== SERVICES ====================
 
-  static async findServicesByBusinessId(businessId, { page = 1, limit = 20 }) {
+  static async findServicesByBusinessId(businessId, { page = 1, limit = 20, lang: rawLang = 'vi' }) {
+    const lang = normalizeLang(rawLang);
     const offset = (page - 1) * limit;
     const sql = `
-      SELECT s.*, COUNT(*) OVER() AS total_count
+      SELECT s.id, s.business_id, s.spot_id, s.category,
+             ${localizedSQL(lang, 's.service_name_vi', 's.service_name_en', 'service_name')},
+             s.description_vi,
+             s.price_from, s.price_to, s.currency, s.unit,
+             s.booking_url, s.is_active, s.created_at, s.updated_at,
+             COUNT(*) OVER() AS total_count
       FROM services s
       WHERE s.business_id = $1
       ORDER BY s.created_at DESC

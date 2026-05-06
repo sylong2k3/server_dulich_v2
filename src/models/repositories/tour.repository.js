@@ -35,7 +35,7 @@ class TourRepository {
     const sql = `
       SELECT tp.id, tp.business_id, tp.province_code,
              ${localizedSQL(lang, 'tp.name_vi', 'tp.name_en', 'name')},
-             tp.name_vi, tp.name_en, tp.slug,
+             tp.slug,
              tp.description_vi, tp.duration_days, tp.price_from_vnd,
              tp.max_guests, tp.includes, tp.excludes,
              tp.start_location_vi, tp.end_location_vi,
@@ -70,13 +70,15 @@ class TourRepository {
                  'spot_id', s.spot_id, 'business_id', s.business_id,
                  'title_vi', s.title_vi, 'description_vi', s.description_vi,
                  'planned_duration_min', s.planned_duration_min,
-                 'geom', ST_AsGeoJSON(s.geom)::json
+                 'geom', ST_AsGeoJSON(COALESCE(ts.geom, b.geom, ST_GeomFromText('POINT(0 0)', 4326)))::json
                ) ORDER BY s.day_number, s.stop_order
              ) FILTER (WHERE s.id IS NOT NULL) AS stops
       FROM tour_packages tp
       LEFT JOIN businesses b ON tp.business_id = b.id
       LEFT JOIN vn_units.provinces p ON tp.province_code = p.code
       LEFT JOIN tour_package_stops s ON s.tour_package_id = tp.id
+      LEFT JOIN tourism_spots ts ON s.spot_id = ts.id
+      LEFT JOIN businesses bs ON s.business_id = bs.id
       WHERE tp.id = $1
       GROUP BY tp.id, b.business_name, p.name, p.name_en
     `;
@@ -97,7 +99,7 @@ class TourRepository {
                  'spot_id', s.spot_id, 'business_id', s.business_id,
                  'title_vi', s.title_vi, 'description_vi', s.description_vi,
                  'planned_duration_min', s.planned_duration_min,
-                 'geom', ST_AsGeoJSON(s.geom)::json,
+                 'geom', ST_AsGeoJSON(COALESCE(ts.geom, bs.geom, ST_GeomFromText('POINT(0 0)', 4326)))::json,
                  'spot_name', ${localizedValueSQL(lang, 'ts.name_vi', 'ts.name_en')}
                ) ORDER BY s.day_number, s.stop_order
              ) FILTER (WHERE s.id IS NOT NULL) AS stops
@@ -106,6 +108,7 @@ class TourRepository {
       LEFT JOIN vn_units.provinces p ON tp.province_code = p.code
       LEFT JOIN tour_package_stops s ON s.tour_package_id = tp.id
       LEFT JOIN tourism_spots ts ON s.spot_id = ts.id
+      LEFT JOIN businesses bs ON s.business_id = bs.id
       WHERE tp.slug = $1
       GROUP BY tp.id, b.business_name, p.name, p.name_en
     `;
@@ -183,11 +186,11 @@ class TourRepository {
     const lang = normalizeLang(rawLang);
     const sql = `
       SELECT s.*,
-             ST_AsGeoJSON(s.geom)::json AS geom_json,
-             ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'spot_name')},
-             ts.name_vi AS spot_name_vi
+             ST_AsGeoJSON(COALESCE(ts.geom, bs.geom, ST_GeomFromText('POINT(0 0)', 4326)))::json AS geom_json,
+             ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'spot_name')}
       FROM tour_package_stops s
       LEFT JOIN tourism_spots ts ON s.spot_id = ts.id
+      LEFT JOIN businesses bs ON s.business_id = bs.id
       WHERE s.tour_package_id = $1
       ORDER BY s.day_number, s.stop_order
     `;
@@ -198,29 +201,32 @@ class TourRepository {
   static async createStop(data) {
     const {
       tour_package_id, day_number, stop_order, spot_id, business_id,
-      title_vi, description_vi, planned_duration_min, lng, lat
+      title_vi, description_vi, planned_duration_min
     } = data;
-    const geomExpr = lng && lat ? `ST_SetSRID(ST_MakePoint($9, $10), 4326)` : 'NULL';
     const sql = `
       INSERT INTO tour_package_stops (
         tour_package_id, day_number, stop_order, spot_id, business_id,
-        title_vi, description_vi, planned_duration_min, geom
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,${geomExpr})
-      RETURNING *, ST_AsGeoJSON(geom)::json AS geom_json
+        title_vi, description_vi, planned_duration_min
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      RETURNING *
     `;
     const params = [
       tour_package_id, day_number, stop_order,
       spot_id || null, business_id || null,
       title_vi || null, description_vi || null, planned_duration_min || null,
     ];
-    if (lng && lat) { params.push(lng, lat); }
     const result = await db.query(sql, params);
     return result.rows[0];
   }
 
   static async findStopById(id) {
     const result = await db.query(
-      'SELECT s.*, ST_AsGeoJSON(s.geom)::json AS geom_json FROM tour_package_stops s WHERE s.id = $1',
+      `SELECT s.*,
+              ST_AsGeoJSON(COALESCE(ts.geom, bs.geom, ST_GeomFromText('POINT(0 0)', 4326)))::json AS geom_json
+       FROM tour_package_stops s
+       LEFT JOIN tourism_spots ts ON s.spot_id = ts.id
+       LEFT JOIN businesses bs ON s.business_id = bs.id
+       WHERE s.id = $1`,
       [id]
     );
     return result.rows[0] || null;
@@ -234,13 +240,9 @@ class TourRepository {
     for (const key of allowed) {
       if (fields[key] !== undefined) { sets.push(`${key} = $${idx++}`); params.push(fields[key]); }
     }
-    if (fields.lng !== undefined && fields.lat !== undefined) {
-      sets.push(`geom = ST_SetSRID(ST_MakePoint($${idx++}, $${idx++}), 4326)`);
-      params.push(fields.lng, fields.lat);
-    }
     if (!sets.length) return null;
     params.push(id);
-    const sql = `UPDATE tour_package_stops SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *, ST_AsGeoJSON(geom)::json AS geom_json`;
+    const sql = `UPDATE tour_package_stops SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`;
     const result = await db.query(sql, params);
     return result.rows[0] || null;
   }

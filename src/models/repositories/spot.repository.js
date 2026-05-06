@@ -1,4 +1,4 @@
-const { query } = require('../../configs/database');
+﻿const { query } = require('../../configs/database');
 const { create, updateById } = require('../../utils/database');
 const {
   dWithinSQL,
@@ -14,7 +14,7 @@ class SpotRepository {
   static tableName = 'tourism_spots';
 
   /**
-   * Danh sách điểm du lịch với filter + pagination
+   * Danh sÃ¡ch Ä‘iá»ƒm du lá»‹ch vá»›i filter + pagination
    */
   static async getAllSpots(options = {}) {
     const {
@@ -189,7 +189,7 @@ class SpotRepository {
   }
 
   /**
-   * Tìm spots trong bán kính (nearby)
+   * TÃ¬m spots trong bÃ¡n kÃ­nh (nearby)
    */
   static async findNearby(lat, lng, radiusKm = 10, limit = 50, rawLang = 'vi') {
     const lang = normalizeLang(rawLang);
@@ -218,7 +218,7 @@ class SpotRepository {
   }
 
   /**
-   * Tìm spots trong bbox
+   * TÃ¬m spots trong bbox
    */
   static async findByBbox(minLng, minLat, maxLng, maxLat, limit = 500, rawLang = 'vi') {
     const lang = normalizeLang(rawLang);
@@ -294,7 +294,7 @@ class SpotRepository {
   }
 
   /**
-   * Spots nổi bật
+   * Spots ná»•i báº­t
    */
   static async getFeaturedSpots(limit = 12, categoryId, rawLang = 'vi') {
     const lang = normalizeLang(rawLang);
@@ -327,7 +327,7 @@ class SpotRepository {
   }
 
   /**
-   * Chi tiết spot theo slug — đầy đủ: capacity, rating, media, business
+   * Chi tiáº¿t spot theo slug â€” Ä‘áº§y Ä‘á»§: capacity, rating, media, business
    */
   static async findBySlug(slug, rawLang = 'vi') {
     const lang = normalizeLang(rawLang);
@@ -353,17 +353,17 @@ class SpotRepository {
         p.code        AS province_code,
         ${localizedSQL(lang, 'c.name', 'c.name_en', 'commune_name')},
 
-        -- Sức chứa hiện tại (bản ghi mới nhất)
+        -- Sá»©c chá»©a hiá»‡n táº¡i (báº£n ghi má»›i nháº¥t)
         cap.visitor_count     AS current_visitor_count,
         cap.capacity_pct      AS current_capacity_pct,
         cap.recorded_at       AS capacity_recorded_at,
 
-        -- Ảnh chính
+        -- áº¢nh chÃ­nh
         (SELECT url FROM spot_media sm
          WHERE sm.spot_id = ts.id AND sm.is_primary = true
          LIMIT 1) AS primary_image,
 
-        -- Danh sách dịch vụ & doanh nghiệp liên quan (JSON array)
+        -- Danh sÃ¡ch dá»‹ch vá»¥ & doanh nghiá»‡p liÃªn quan (JSON array)
         (SELECT json_agg(json_build_object(
             'business_id',   b.id,
             'business_name', b.business_name,
@@ -396,7 +396,7 @@ class SpotRepository {
   }
 
   /**
-   * Tính lại rating_avg + rating_count từ bảng ratings → cập nhật vào tourism_spots
+   * TÃ­nh láº¡i rating_avg + rating_count tá»« báº£ng ratings â†’ cáº­p nháº­t vÃ o tourism_spots
    */
   static async updateRatingStats(spotId) {
     const sql = `
@@ -419,10 +419,10 @@ class SpotRepository {
   }
 
   /**
-   * Tìm theo ID
+   * TÃ¬m theo ID
    */
-  static async findById(id) {
-    const lang = 'vi';
+  static async findById(id, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
     const sql = `
       SELECT ts.id, ts.category_id, ts.province_code, ts.ward_code, ts.slug,
         ts.altitude_m, ts.opening_hours,
@@ -452,7 +452,7 @@ class SpotRepository {
   }
 
   /**
-   * Tạo spot mới
+   * Táº¡o spot má»›i
    */
   static async createSpot(data) {
     const {
@@ -500,7 +500,7 @@ class SpotRepository {
   }
 
   /**
-   * Cập nhật spot
+   * Cáº­p nháº­t spot
    */
   static async updateSpot(id, data) {
     const updates = { ...data };
@@ -510,7 +510,7 @@ class SpotRepository {
     delete updates.created_at;
     delete updates.created_by;
 
-    // Xử lý cập nhật vị trí nếu có
+    // Xá»­ lÃ½ cáº­p nháº­t vá»‹ trÃ­ náº¿u cÃ³
     if (data.longitude !== undefined && data.latitude !== undefined) {
       await query(
         `UPDATE ${this.tableName} SET geom = ST_SetSRID(ST_MakePoint($1, $2), 4326) WHERE id = $3`,
@@ -520,7 +520,7 @@ class SpotRepository {
       delete updates.latitude;
     }
 
-    // Xử lý opening_hours JSONB
+    // Xá»­ lÃ½ opening_hours JSONB
     if (updates.opening_hours && typeof updates.opening_hours === 'object') {
       updates.opening_hours = JSON.stringify(updates.opening_hours);
     }
@@ -533,7 +533,7 @@ class SpotRepository {
   }
 
   /**
-   * Xóa spot (soft delete)
+   * XÃ³a spot (soft delete)
    */
   static async softDelete(id) {
     const sql = `UPDATE ${this.tableName} SET status = 'archived' WHERE id = $1 RETURNING id`;
@@ -556,7 +556,7 @@ class SpotRepository {
   }
 
   /**
-   * Kiểm tra slug đã tồn tại
+   * Kiá»ƒm tra slug Ä‘Ã£ tá»“n táº¡i
    */
   static async existsBySlug(slug, excludeId = null) {
     let sql = `SELECT COUNT(*) as count FROM ${this.tableName} WHERE slug = $1`;
@@ -570,7 +570,7 @@ class SpotRepository {
   }
 
   /**
-   * Kiểm tra spot có tồn tại theo ID
+   * Kiá»ƒm tra spot cÃ³ tá»“n táº¡i theo ID
    */
   static async existsById(id, isActive = false) {
     let sql = `SELECT COUNT(*) as count FROM ${this.tableName} WHERE id = $1`;
@@ -650,7 +650,7 @@ class SpotRepository {
     return rows[0] || null;
   }
 
-  // Đặt ảnh chính: bỏ is_primary các media khác, set is_primary cho mediaId
+  // Äáº·t áº£nh chÃ­nh: bá» is_primary cÃ¡c media khÃ¡c, set is_primary cho mediaId
   static async setPrimaryMedia(spotId, mediaId) {
     await query(
       'UPDATE spot_media SET is_primary = false WHERE spot_id = $1',
@@ -663,7 +663,7 @@ class SpotRepository {
     return rows[0] || null;
   }
 
-  // Cập nhật sort_order + metadata cho một media
+  // Cáº­p nháº­t sort_order + metadata cho má»™t media
   static async updateMediaMeta(mediaId, data) {
     const allowed = ['title_vi', 'title_en', 'sort_order', 'language', 'is_primary'];
     const fields = Object.entries(data)

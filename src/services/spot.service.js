@@ -5,6 +5,7 @@ const { formatPagination } = require('../utils/responseFormatter');
 const { uploadBufferToStorage, deleteFromStorage, extractPublicId } = require('../configs/localStorage');
 const { cacheOrFetch, invalidateByPrefix } = require('../utils/cache.utils');
 const { isValidCoords, parseBbox } = require('../utils/geo.utils');
+const { normalizeLang } = require('../utils/i18n.utils');
 const QRCode = require('qrcode');
 
 // Các role được bypass ownership check (quản lý nội dung toàn hệ thống)
@@ -154,9 +155,10 @@ class SpotService {
     }, 60);
   }
 
-  async getSpotById(id, viewer = {}) {
-    return cacheOrFetch(`spot:id:${id}:${this._canManage(viewer?.user) ? 'manage' : 'public'}`, async () => {
-      const spot = await SpotRepository.findById(id);
+  async getSpotById(id, viewer = {}, options = {}) {
+    const lang = normalizeLang(options.lang);
+    return cacheOrFetch(`spot:id:${id}:${lang}:${this._canManage(viewer?.user) ? 'manage' : 'public'}`, async () => {
+      const spot = await SpotRepository.findById(id, lang);
       if (!spot || (spot.status !== 'active' && !this._canManage(viewer?.user))) throw new Api404Error('Điểm du lịch không tồn tại');
       return spot;
     }, 60);

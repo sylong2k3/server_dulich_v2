@@ -48,6 +48,8 @@ router.get('/featured', validateQuery(featuredQuerySchema), SpotController.getFe
 
 // ==================== PROTECTED ROUTES ====================
 // 3) Phân trang cho trang quản trị: xem cả trạng thái draft/archived nếu cần
+// ROUTE: GET /id/:id - Truy vấn điểm du lịch theo ID. Xử lý bởi SpotController.getSpotById. Truy cập: cho phép đăng nhập tùy chọn.
+router.get('/id/:id', optionalAuth, validateParams(idParamSchema), SpotController.getSpotById);
 // ROUTE: GET /:slug - Truy vấn điểm du lịch. Xử lý bởi SpotController.getSpotBySlug. Truy cập: cho phép đăng nhập tùy chọn.
 router.get('/:slug', optionalAuth, validateParams(slugParamSchema), validateQuery(spotDetailQuerySchema), SpotController.getSpotBySlug);
 // ROUTE: GET /:id/media - Truy vấn điểm du lịch. Xử lý bởi SpotController.getSpotMedia. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.

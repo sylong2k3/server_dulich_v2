@@ -8,6 +8,9 @@ class OcopController {
   static getById = asyncHandler(async (req, res) => OK(res, 'Chi tiết sản phẩm OCOP', await OcopService.getById(req.params.id, { user: req.user }, req.query)));
   static getCategories = asyncHandler(async (req, res) => OK(res, 'Danh mục OCOP', await OcopService.getCategories()));
 
+  // ==================== OWNER ====================
+  static getMy = asyncHandler(async (req, res) => OK(res, 'Sản phẩm OCOP của tôi', await OcopService.getMy(req.query, req.user)));
+
   // ==================== ADMIN — không cache ====================
   static getAdminAll = asyncHandler(async (req, res) => OK(res, 'Danh sách sản phẩm OCOP (admin)', await OcopService.getAdminAll(req.query)));
   static getAdminById = asyncHandler(async (req, res) => OK(res, 'Chi tiết sản phẩm OCOP (admin)', await OcopService.getAdminById(req.params.id, req.query)));

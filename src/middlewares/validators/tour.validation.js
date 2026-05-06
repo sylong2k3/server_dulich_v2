@@ -2,7 +2,6 @@ const Joi = require('joi');
 const {
     uuid, uuidParam,
     slugField,
-    latField, lngField,
     provinceCodeField,
     paginationQuery, sortQuery,
 } = require('./common/base-schemas');
@@ -97,8 +96,6 @@ const stopBaseFields = {
     title_vi: Joi.string().trim().max(255).allow('', null),
     description_vi: Joi.string().trim().allow('', null),
     planned_duration_min: Joi.number().integer().min(1).allow(null),
-    lng: lngField(),
-    lat: latField(),
 };
 
 const createStopSchema = Joi.object({

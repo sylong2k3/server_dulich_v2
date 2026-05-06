@@ -1,7 +1,6 @@
 const Joi = require('joi');
 const {
     uuid,
-    latField, lngField,
     provinceCodeField,
     paginationQuery, sortQuery,
 } = require('./common/base-schemas');
@@ -51,8 +50,6 @@ const festivalBaseFields = {
     festival_type: Joi.string().trim().max(50).allow('', null),
     description_vi: Joi.string().trim().allow('', null),
     is_recurring: Joi.boolean(),
-    lng: lngField(),
-    lat: latField(),
     cover_image_url: Joi.string().uri().allow('', null),
     website: Joi.string().uri().allow('', null),
     location_name: Joi.string().trim().max(LIMITS.NAME_MAX).allow('', null),

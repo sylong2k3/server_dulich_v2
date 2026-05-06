@@ -3,8 +3,6 @@ const {
     uuid,
     uuidParam,
     numericId,
-    latField,
-    lngField,
     paginationQuery,
     sortQuery,
     makeOptional,
@@ -99,8 +97,6 @@ const stopBaseFields = {
     planned_arrival: Joi.string().pattern(/^\d{2}:\d{2}$/).allow(null),
     planned_duration_min: Joi.number().integer().min(1).allow(null),
     notes: Joi.string().trim().allow('', null),
-    lng: lngField(),
-    lat: latField(),
 };
 
 const createStopSchema = Joi.object({

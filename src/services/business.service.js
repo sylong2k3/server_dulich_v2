@@ -3,14 +3,16 @@ const UserRepository = require('../models/repositories/user.repository');
 const NotificationService = require('./notification.service');
 const { Api400Error, Api404Error, Api403Error } = require('../core/error.response');
 const FKValidator = require('../utils/fk-validator');
+const { normalizeLang } = require('../utils/i18n.utils');
 
 class BusinessService {
   // ==================== BUSINESSES ====================
 
   static async getAll(query) {
-    const { page = 1, limit = 10, search, status, business_type, province_code, ward_code, sortBy, sortOrder } = query;
+    const { page = 1, limit = 10, search, status, business_type, province_code, ward_code, sortBy, sortOrder, lang: rawLang } = query;
+    const lang = normalizeLang(rawLang);
     const { rows, total } = await BusinessRepository.findAll({
-      page, limit, search, status, business_type, province_code, ward_code, sortBy, sortOrder,
+      page, limit, search, status, business_type, province_code, ward_code, sortBy, sortOrder, lang,
     });
     return {
       items: rows.map(r => { const { total_count, ...item } = r; return item; }),
@@ -22,8 +24,9 @@ class BusinessService {
     return this.getAll({ ...query, status: 'approved' });
   }
 
-  static async getById(id) {
-    const business = await BusinessRepository.findById(id);
+  static async getById(id, rawLang = 'vi') {
+    const lang = normalizeLang(rawLang);
+    const business = await BusinessRepository.findById(id, lang);
     if (!business) throw new Api404Error('Không tìm thấy doanh nghiệp');
     return business;
   }
@@ -110,8 +113,9 @@ class BusinessService {
     const business = await BusinessRepository.findById(businessId);
     if (!business) throw new Api404Error('Không tìm thấy doanh nghiệp');
 
-    const { page = 1, limit = 20 } = query;
-    const { rows, total } = await BusinessRepository.findServicesByBusinessId(businessId, { page, limit });
+    const { page = 1, limit = 20, lang: rawLang } = query;
+    const lang = normalizeLang(rawLang);
+    const { rows, total } = await BusinessRepository.findServicesByBusinessId(businessId, { page, limit, lang });
     return {
       items: rows.map(r => { const { total_count, ...item } = r; return item; }),
       pagination: { page: +page, limit: +limit, total, totalPages: Math.ceil(total / limit) },

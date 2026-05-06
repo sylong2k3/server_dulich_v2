@@ -32,14 +32,14 @@ class FestivalRepository {
         const sql = `
             SELECT f.id,
                    ${localizedSQL(lang, 'f.name_vi', 'f.name_en', 'name')},
-                   f.name_vi, f.name_en,
-                   f.festival_type, f.description_vi,
+                   f.festival_type, f.description_vi AS description,
                    f.start_date, f.end_date, f.cover_image_url, f.location_name,
                    f.is_recurring, f.recurrence_rule, f.website,
                    f.province_code, f.spot_id, f.is_published, f.created_at,
                    ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
                    ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'spot_name')},
-                   ST_X(f.geom::geometry) AS lng, ST_Y(f.geom::geometry) AS lat,
+                   ST_X(COALESCE(ts.geom::geometry, ST_GeomFromText('POINT(0 0)', 4326))) AS lng,
+                   ST_Y(COALESCE(ts.geom::geometry, ST_GeomFromText('POINT(0 0)', 4326))) AS lat,
                    COUNT(*) OVER() AS total_count
             FROM festivals f
             LEFT JOIN vn_units.provinces p ON f.province_code = p.code
@@ -56,11 +56,17 @@ class FestivalRepository {
     static async findById(id, rawLang = 'vi') {
         const lang = normalizeLang(rawLang);
         const sql = `
-            SELECT f.*,
-                ${localizedSQL(lang, 'f.name_vi', 'f.name_en', 'name')},
-                ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
-                ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'spot_name')},
-                ST_X(f.geom::geometry) AS lng, ST_Y(f.geom::geometry) AS lat
+            SELECT f.id,
+                   ${localizedSQL(lang, 'f.name_vi', 'f.name_en', 'name')},
+                   f.festival_type, f.description_vi AS description,
+                   f.start_date, f.end_date, f.cover_image_url, f.location_name,
+                   f.is_recurring, f.recurrence_rule, f.website,
+                   f.province_code, f.spot_id, f.is_published,
+                   f.created_at, f.updated_at,
+                   ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
+                   ${localizedSQL(lang, 'ts.name_vi', 'ts.name_en', 'spot_name')},
+                   ST_X(COALESCE(ts.geom::geometry, ST_GeomFromText('POINT(0 0)', 4326))) AS lng,
+                   ST_Y(COALESCE(ts.geom::geometry, ST_GeomFromText('POINT(0 0)', 4326))) AS lat
             FROM festivals f
             LEFT JOIN vn_units.provinces p ON f.province_code = p.code
             LEFT JOIN tourism_spots ts ON f.spot_id = ts.id
@@ -86,14 +92,15 @@ class FestivalRepository {
         const sql = `
             SELECT f.id,
                    ${localizedSQL(lang, 'f.name_vi', 'f.name_en', 'name')},
-                   f.name_vi, f.name_en,
                    f.festival_type, f.start_date, f.end_date,
                    f.cover_image_url, f.location_name, f.is_recurring, f.recurrence_rule,
                    f.province_code, f.spot_id,
                    ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
-                   ST_X(f.geom::geometry) AS lng, ST_Y(f.geom::geometry) AS lat
+                   ST_X(COALESCE(ts.geom::geometry, ST_GeomFromText('POINT(0 0)', 4326))) AS lng,
+                   ST_Y(COALESCE(ts.geom::geometry, ST_GeomFromText('POINT(0 0)', 4326))) AS lat
             FROM festivals f
             LEFT JOIN vn_units.provinces p ON f.province_code = p.code
+            LEFT JOIN tourism_spots ts ON f.spot_id = ts.id
             WHERE ${conditions.join(' AND ')}
             ORDER BY f.start_date ASC
         `;
@@ -102,22 +109,18 @@ class FestivalRepository {
     }
 
     static async create(data) {
-        const hasGeom = data.lng != null && data.lat != null;
         const sql = `
             INSERT INTO festivals (
                 name_vi, name_en, festival_type, description_vi,
                 start_date, end_date, is_recurring, recurrence_rule,
-                ${hasGeom ? 'geom,' : ''}
                 cover_image_url, website, location_name,
                 province_code, spot_id, is_published
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8,
-                ${hasGeom ? `ST_SetSRID(ST_MakePoint($9, $10), 4326),` : ''}
-                $${hasGeom ? 11 : 9}, $${hasGeom ? 12 : 10}, $${hasGeom ? 13 : 11},
-                $${hasGeom ? 14 : 12}, $${hasGeom ? 15 : 13}, $${hasGeom ? 16 : 14}
+                $9, $10, $11, $12, $13, $14
             ) RETURNING *
         `;
-        const base = [
+        const values = [
             data.name_vi,
             data.name_en || null,
             data.festival_type || null,
@@ -126,9 +129,6 @@ class FestivalRepository {
             data.end_date || null,
             data.is_recurring ?? false,
             data.recurrence_rule || null,
-        ];
-        const geomValues = hasGeom ? [data.lng, data.lat] : [];
-        const rest = [
             data.cover_image_url || null,
             data.website || null,
             data.location_name || null,
@@ -136,7 +136,7 @@ class FestivalRepository {
             data.spot_id || null,
             data.is_published ?? false,
         ];
-        const result = await db.query(sql, [...base, ...geomValues, ...rest]);
+        const result = await db.query(sql, values);
         return result.rows[0];
     }
 
@@ -150,10 +150,6 @@ class FestivalRepository {
         const sets = []; const params = []; let idx = 1;
         for (const key of allowed) {
             if (fields[key] !== undefined) { sets.push(`${key} = $${idx++}`); params.push(fields[key]); }
-        }
-        if (fields.lng != null && fields.lat != null) {
-            sets.push(`geom = ST_SetSRID(ST_MakePoint($${idx++}, $${idx++}), 4326)`);
-            params.push(fields.lng, fields.lat);
         }
         if (!sets.length) return null;
         sets.push('updated_at = NOW()');

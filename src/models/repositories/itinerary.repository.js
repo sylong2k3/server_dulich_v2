@@ -132,12 +132,13 @@ class ItineraryRepository {
                            'notes', s.notes,
                            'is_completed', s.is_completed,
                            'spot_name', ts.name_vi,
-                           'geom', ST_AsGeoJSON(COALESCE(s.custom_geom, ts.geom))::json
+                           'geom', ST_AsGeoJSON(COALESCE(ts.geom, bs.geom, ST_GeomFromText('POINT(0 0)', 4326)))::json
                        ) ORDER BY s.sort_order
                    ) FILTER (WHERE s.id IS NOT NULL) AS stops
             FROM itinerary_days d
             LEFT JOIN itinerary_stops s ON s.day_id = d.id
             LEFT JOIN tourism_spots ts ON ts.id = s.spot_id
+            LEFT JOIN businesses bs ON bs.id = s.business_id
             WHERE d.itinerary_id = $1
             GROUP BY d.id
             ORDER BY d.day_number
@@ -197,16 +198,11 @@ class ItineraryRepository {
     }
 
     static async createStop(data) {
-        const hasCustomGeom = data.lng != null && data.lat != null;
-        const geomExpr = hasCustomGeom
-            ? `ST_SetSRID(ST_MakePoint($9, $10), 4326)`
-            : 'NULL';
-
         const sql = `
             INSERT INTO itinerary_stops
                 (day_id, spot_id, business_id, custom_name, sort_order,
-                 planned_arrival, planned_duration_min, notes, custom_geom)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,${geomExpr})
+                 planned_arrival, planned_duration_min, notes)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
             RETURNING *
         `;
         const params = [
@@ -219,7 +215,6 @@ class ItineraryRepository {
             data.planned_duration_min || null,
             data.notes || null,
         ];
-        if (hasCustomGeom) params.push(data.lng, data.lat);
         const { rows } = await query(sql, params);
         return rows[0];
     }
@@ -232,10 +227,6 @@ class ItineraryRepository {
         let idx = 1;
         for (const key of allowed) {
             if (fields[key] !== undefined) { sets.push(`${key} = $${idx++}`); values.push(fields[key]); }
-        }
-        if (fields.lng != null && fields.lat != null) {
-            sets.push(`custom_geom = ST_SetSRID(ST_MakePoint($${idx++}, $${idx++}), 4326)`);
-            values.push(fields.lng, fields.lat);
         }
         if (fields.is_completed === true) {
             sets.push(`completed_at = NOW()`);
@@ -264,8 +255,8 @@ class ItineraryRepository {
             SELECT ROUND(
                 SUM(
                     ST_Distance(
-                        COALESCE(s.custom_geom, ts.geom)::geography,
-                        LEAD(COALESCE(s.custom_geom, ts.geom)) OVER (
+                        COALESCE(ts.geom, bs.geom)::geography,
+                        LEAD(COALESCE(ts.geom, bs.geom)) OVER (
                             PARTITION BY d.itinerary_id ORDER BY d.day_number, s.sort_order
                         )::geography
                     ) / 1000
@@ -274,8 +265,9 @@ class ItineraryRepository {
             FROM itinerary_days d
             JOIN itinerary_stops s ON s.day_id = d.id
             LEFT JOIN tourism_spots ts ON ts.id = s.spot_id
+            LEFT JOIN businesses bs ON bs.id = s.business_id
             WHERE d.itinerary_id = $1
-              AND COALESCE(s.custom_geom, ts.geom) IS NOT NULL
+              AND COALESCE(ts.geom, bs.geom) IS NOT NULL
         `;
         const { rows } = await query(sql, [itineraryId]);
         return rows[0]?.total_km ? Number(rows[0].total_km) : null;

@@ -72,6 +72,21 @@ class OcopService {
     return item;
   }
 
+  static async getMy(query, user) {
+    if (!user?.business_id) throw new (require('../core/error.response').Api400Error)('Tài khoản chưa liên kết doanh nghiệp');
+    const { page = 1, limit = 12, search, category, star_rating, sortBy, sortOrder, lang: rawLang } = query;
+    const lang = normalizeLang(rawLang);
+    const { rows, total } = await OcopRepository.findAll({
+      page, limit, search, category, star_rating,
+      business_id: user.business_id,
+      sortBy, sortOrder, lang,
+    });
+    return {
+      items: rows.map(({ total_count, ...item }) => item),
+      pagination: { page: +page, limit: +limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
   static async create(data) {
     await FKValidator.all([
       FKValidator.business(data.business_id, 'approved'),

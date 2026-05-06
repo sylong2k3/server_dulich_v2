@@ -2,7 +2,7 @@ const db = require('../../configs/database');
 const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
 class OcopRepository {
-    static async findAll({ page = 1, limit = 12, search, category, star_rating, province_code, is_active, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
+    static async findAll({ page = 1, limit = 12, search, category, star_rating, province_code, business_id, is_active, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
         const lang = normalizeLang(rawLang);
         const offset = (page - 1) * limit;
         const params = [];
@@ -13,6 +13,7 @@ class OcopRepository {
         if (category) { conditions.push(`o.category = $${idx++}`); params.push(category); }
         if (star_rating) { conditions.push(`o.star_rating = $${idx++}`); params.push(star_rating); }
         if (province_code) { conditions.push(`o.province_code = $${idx++}`); params.push(province_code); }
+        if (business_id) { conditions.push(`o.business_id = $${idx++}`); params.push(business_id); }
         if (search) {
             conditions.push(`(o.name_vi ILIKE $${idx} OR o.name_en ILIKE $${idx} OR o.description_vi ILIKE $${idx} OR o.producer_name ILIKE $${idx})`);
             params.push(`%${search}%`);
@@ -32,8 +33,7 @@ class OcopRepository {
         const sql = `
             SELECT o.id,
                    ${localizedSQL(lang, 'o.name_vi', 'o.name_en', 'name')},
-                   o.name_vi, o.name_en,
-                   o.category, o.description_vi,
+                   o.category, o.description_vi AS description,
                    o.star_rating, o.certification_no, o.price_vnd, o.unit,
                    o.cover_image_url, o.media_urls, o.shop_url,
                    o.producer_name, o.province_code, o.business_id,
@@ -57,11 +57,16 @@ class OcopRepository {
     static async findById(id, rawLang = 'vi') {
         const lang = normalizeLang(rawLang);
         const sql = `
-            SELECT o.*,
-                ${localizedSQL(lang, 'o.name_vi', 'o.name_en', 'name')},
-                ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
-                b.business_name,
-                ST_X(o.geom::geometry) AS lng, ST_Y(o.geom::geometry) AS lat
+            SELECT o.id,
+                   ${localizedSQL(lang, 'o.name_vi', 'o.name_en', 'name')},
+                   o.category, o.description_vi AS description,
+                   o.star_rating, o.certification_no, o.certified_at,
+                   o.price_vnd, o.unit, o.cover_image_url, o.media_urls, o.shop_url,
+                   o.producer_name, o.province_code, o.business_id,
+                   o.is_active, o.created_at, o.updated_at,
+                   ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
+                   b.business_name,
+                   ST_X(o.geom::geometry) AS lng, ST_Y(o.geom::geometry) AS lat
             FROM ocop_products o
             LEFT JOIN vn_units.provinces p ON o.province_code = p.code
             LEFT JOIN businesses b ON o.business_id = b.id

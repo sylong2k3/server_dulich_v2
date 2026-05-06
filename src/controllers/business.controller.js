@@ -17,7 +17,7 @@ class BusinessController {
     });
 
     static getById = asyncHandler(async (req, res) => {
-        const business = await BusinessService.getById(req.params.businessId);
+        const business = await BusinessService.getById(req.params.businessId, req.query.lang);
         return OK(res, 'Chi tiết doanh nghiệp', { business });
     });
 

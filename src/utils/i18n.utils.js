@@ -52,6 +52,15 @@ const localizedValueSQL = (lang, viCol, enCol) => {
 };
 
 /**
+ * Trả về tên cột ngôn ngữ chính (không COALESCE) để select cùng với localizedSQL.
+ * Dùng khi cần biết thêm trường nào đang được sử dụng (e.g. name_lang: 'vi').
+ */
+const langFieldSQL = (lang, viCol, enCol, alias) => {
+  const field = lang === 'en' ? enCol : viCol;
+  return `${field} AS ${alias}`;
+};
+
+/**
  * Helper để build cache key suffix theo ngôn ngữ.
  * Tránh việc cache đè lẫn giữa các ngôn ngữ khác nhau.
  */
@@ -63,5 +72,6 @@ module.exports = {
   normalizeLang,
   localizedSQL,
   localizedValueSQL,
+  langFieldSQL,
   langCacheKey,
 };
