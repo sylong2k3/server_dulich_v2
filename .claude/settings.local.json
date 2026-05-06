@@ -127,7 +127,8 @@
       "Bash(PGPASSWORD=long2003 psql -h localhost -p 5432 -U postgres -d dulich2.0)",
       "Bash(node -e \"require\\('./src/utils/i18n.utils'\\); require\\('./src/models/repositories/spot.repository'\\); require\\('./src/models/repositories/culinary.repository'\\); require\\('./src/models/repositories/festival.repository'\\); require\\('./src/models/repositories/ocop.repository'\\); require\\('./src/models/repositories/tour.repository'\\); require\\('./src/services/culinary.service'\\); require\\('./src/services/festival.service'\\); require\\('./src/services/ocop.service'\\); require\\('./src/services/tour.service'\\); require\\('./src/controllers/culinary.controller'\\); require\\('./src/controllers/festival.controller'\\); require\\('./src/controllers/ocop.controller'\\); require\\('./src/controllers/tour.controller'\\); console.log\\('All modules loaded successfully'\\);\")",
       "Bash(node scripts/generate-postman-collection.js)",
-      "PowerShell(\\(Get-Content \"src\\\\models\\\\repositories\\\\spot.repository.js\"\\) | Where-Object { $_ -notmatch 'langFieldSQL' } | Set-Content \"src\\\\models\\\\repositories\\\\spot.repository.js\" -Encoding utf8)"
+      "PowerShell(\\(Get-Content \"src\\\\models\\\\repositories\\\\spot.repository.js\"\\) | Where-Object { $_ -notmatch 'langFieldSQL' } | Set-Content \"src\\\\models\\\\repositories\\\\spot.repository.js\" -Encoding utf8)",
+      "Bash(node scripts/insert-mock-capacity.js)"
     ]
   }
 }
