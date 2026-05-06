@@ -440,11 +440,21 @@ class SpotRepository {
         ${asGeoJSON('ts.geom')},
         ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
         ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
-        ${localizedSQL(lang, 'cm.name', 'cm.name_en', 'commune_name')}
+        ${localizedSQL(lang, 'cm.name', 'cm.name_en', 'commune_name')},
+        cap.visitor_count     AS current_visitor_count,
+        cap.capacity_pct      AS current_capacity_pct,
+        cap.recorded_at       AS capacity_recorded_at
       FROM ${this.tableName} ts
       LEFT JOIN spot_categories sc ON ts.category_id = sc.id
       LEFT JOIN vn_units.provinces p ON ts.province_code = p.code
       LEFT JOIN vn_units.wards cm ON ts.ward_code = cm.code
+      LEFT JOIN LATERAL (
+        SELECT visitor_count, capacity_pct, recorded_at
+        FROM capacity_logs
+        WHERE spot_id = ts.id
+        ORDER BY recorded_at DESC
+        LIMIT 1
+      ) cap ON true
       WHERE ts.id = $1
     `;
     const { rows } = await query(sql, [id]);
