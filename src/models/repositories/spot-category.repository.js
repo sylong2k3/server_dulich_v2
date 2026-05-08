@@ -87,6 +87,13 @@ class SpotCategoryRepository {
 
     const { rows } = await query(sql);
 
+    const pruneEmptyBranches = (categories) => categories
+      .map(category => ({
+        ...category,
+        children: pruneEmptyBranches(category.children),
+      }))
+      .filter(category => category.spot_count > 0 || category.children.length > 0);
+
     // Build cây trong JS
     const map = {};
     rows.forEach(r => { map[r.id] = { ...r, spot_count: parseInt(r.spot_count), children: [] }; });
@@ -100,7 +107,7 @@ class SpotCategoryRepository {
       }
     });
 
-    return roots;
+    return pruneEmptyBranches(roots);
   }
 
   // ─── Chi tiết (kèm danh sách con nếu là danh mục cha) ───────────────────────

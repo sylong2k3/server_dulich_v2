@@ -17,7 +17,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 -- SCHEMA AUTH (migration 005)
 -- Chứa: roles, permissions, users, role_permissions,
 --        refresh_tokens, blacklist_tokens
--- search_path = public, auth → truy vấn không cần prefix schema
+-- search_path = public, auth → truy vấn không cần prefi x schema
 -- ============================================================
 
 CREATE SCHEMA IF NOT EXISTS auth;

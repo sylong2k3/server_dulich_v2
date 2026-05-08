@@ -203,6 +203,7 @@ class SpotService {
     this._generateAndSaveQrCode(spot.id, spot.slug).catch(() => { });
 
     invalidateByPrefix('spots:');
+    invalidateByPrefix('spot-categories:');
     return spot;
   }
 
@@ -243,6 +244,7 @@ class SpotService {
 
     const spot = await SpotRepository.updateSpot(id, data);
     invalidateByPrefix('spots:');
+    invalidateByPrefix('spot-categories:');
     return spot;
   }
 
@@ -256,6 +258,7 @@ class SpotService {
     this._assertOwnerOrAdmin(existing, user);
     const result = await SpotRepository.softDelete(id);
     invalidateByPrefix('spots:');
+    invalidateByPrefix('spot-categories:');
     return result;
   }
 
