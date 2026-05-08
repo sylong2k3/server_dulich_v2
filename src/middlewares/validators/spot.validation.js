@@ -32,6 +32,7 @@ const spotListQueryFields = {
     lang: Joi.string().valid('vi', 'en').default('vi'),
     search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).optional(),
     category_id: Joi.number().integer().min(1).optional(),
+    parent_category_id: Joi.number().integer().min(1).optional(),
     province_code: provinceCodeField(),
     status: Joi.string().valid(...SPOT_STATUS).optional(),
     is_featured: Joi.boolean().optional(),

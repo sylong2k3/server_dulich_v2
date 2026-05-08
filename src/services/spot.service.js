@@ -55,6 +55,7 @@ class SpotService {
       effectiveOptions.status || 'active',
       effectiveOptions.province_code || 'all',
       effectiveOptions.category_id || 'all',
+      effectiveOptions.parent_category_id || 'all',
       effectiveOptions.created_by || 'any',
       effectiveOptions.search || '',
       effectiveOptions.lat ?? '',
@@ -96,6 +97,7 @@ class SpotService {
       `l${limit}`,
       effectiveOptions.province_code || 'all',
       effectiveOptions.category_id || 'all',
+      effectiveOptions.parent_category_id || 'all',
       effectiveOptions.created_by || 'any',
       effectiveOptions.lat ?? '',
       effectiveOptions.lng ?? '',
@@ -450,4 +452,3 @@ class SpotService {
 }
 
 module.exports = new SpotService();
-

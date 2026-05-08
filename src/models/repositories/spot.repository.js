@@ -21,6 +21,7 @@ class SpotRepository {
       page = 1,
       limit = 20,
       category_id,
+      parent_category_id,
       province_code,
       status = 'active',
       is_featured,
@@ -50,6 +51,12 @@ class SpotRepository {
     if (category_id !== undefined && category_id !== null) {
       whereClause += ` AND ts.category_id = $${paramCount}`;
       values.push(Number(category_id));
+      paramCount++;
+    }
+
+    if (parent_category_id !== undefined && parent_category_id !== null) {
+      whereClause += ` AND (sc.parent_id = $${paramCount} OR ts.category_id = $${paramCount})`;
+      values.push(Number(parent_category_id));
       paramCount++;
     }
 
