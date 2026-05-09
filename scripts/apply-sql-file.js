@@ -21,15 +21,7 @@ const pool = new Pool({
 
 (async () => {
   await pool.query(fs.readFileSync(sqlFile, 'utf8'));
-  const { rows } = await pool.query(`
-    SELECT
-      COUNT(DISTINCT spot_id)::int AS spots,
-      COUNT(1)::int AS rows
-    FROM spot_media
-    WHERE url LIKE '/uploads/images/wiki-%'
-  `);
-  console.log(`database=${database}`);
-  console.table(rows);
+  console.log(`applied ${sqlFile} on ${database}`);
   await pool.end();
 })().catch(async (error) => {
   console.error(error);

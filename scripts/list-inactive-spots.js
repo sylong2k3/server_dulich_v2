@@ -13,12 +13,13 @@ const pool = new Pool({
 
 (async () => {
   const { rows } = await pool.query(`
-    SELECT slug, COALESCE(name_en, name_vi) AS name, cover_image_url
-    FROM tour_packages
-    ORDER BY created_at DESC, slug
+    SELECT slug, name_vi, name_en, status
+    FROM tourism_spots
+    WHERE status IS DISTINCT FROM 'active'
+    ORDER BY slug
   `);
-  console.log(`database=${database}`);
   console.table(rows);
+  console.log('count', rows.length);
   await pool.end();
 })().catch(async (error) => {
   console.error(error);
