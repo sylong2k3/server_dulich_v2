@@ -460,7 +460,7 @@ class SpotService {
       id: spot.id,
       slug: spot.slug,
       name: spot.name,
-      geom: spot.geom,
+      geojson: spot.geojson,
       category_id: spot.category_id,
       category_name: spot.category_name,
       category_icon: spot.category_icon,
