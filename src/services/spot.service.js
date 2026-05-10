@@ -63,6 +63,7 @@ class SpotService {
       effectiveOptions.radius_km ?? '',
       effectiveOptions.is_featured ?? '',
       effectiveOptions.rating_min || '',
+      effectiveOptions.capacity ?? '',
       effectiveOptions.sortBy || 'created_at',
       effectiveOptions.sortOrder || 'DESC',
     ].join(':');
@@ -89,7 +90,7 @@ class SpotService {
   async getMapSpots(options = {}, viewer = {}) {
     const page = Math.max(1, parseInt(options.page, 10) || 1);
     const limit = Math.min(1000, Math.max(1, parseInt(options.limit, 10) || 500));
-    const effectiveOptions = this._applyListScope({ ...options, page, limit }, viewer?.user);
+    const effectiveOptions = this._applyListScope({ ...options, page, limit, capacity: options.capacity ?? true }, viewer?.user);
     const cacheKey = [
       'spots:map',
       effectiveOptions.lang || 'vi',
@@ -105,12 +106,13 @@ class SpotService {
       effectiveOptions.search || '',
       effectiveOptions.is_featured ?? '',
       effectiveOptions.rating_min || '',
+      effectiveOptions.capacity ?? '',
       effectiveOptions.sortBy || '',
       effectiveOptions.sortOrder || 'DESC',
     ].join(':');
     return cacheOrFetch(cacheKey, async () => {
       const { spots, totalCount } = await SpotRepository.getAllSpots(effectiveOptions);
-      const result = formatPagination(spots, totalCount, page, limit);
+      const result = formatPagination(spots.map(this._toMapSpot), totalCount, page, limit);
       return { spots: result.data, pagination: result.pagination };
     }, 60);
   }
@@ -451,6 +453,41 @@ class SpotService {
 
   _canManage(user) {
     return Boolean(user?.hasPermission?.('spots', 'update') || user?.hasPermission?.('spots', 'delete'));
+  }
+
+  _toMapSpot(spot) {
+    const mapSpot = {
+      id: spot.id,
+      slug: spot.slug,
+      name: spot.name,
+      geom: spot.geom,
+      category_id: spot.category_id,
+      category_name: spot.category_name,
+      category_icon: spot.category_icon,
+      province_name: spot.province_name,
+      commune_name: spot.commune_name,
+      max_capacity: spot.max_capacity,
+    };
+
+    if (spot.distance_m !== undefined) {
+      mapSpot.distance_m = spot.distance_m;
+    }
+
+    if (
+      spot.current_visitor_count !== undefined
+      || spot.current_capacity_pct !== undefined
+      || spot.capacity_status !== undefined
+      || spot.capacity_recorded_at !== undefined
+      || spot.alert_threshold_pct !== undefined
+    ) {
+      mapSpot.current_visitor_count = spot.current_visitor_count;
+      mapSpot.current_capacity_pct = spot.current_capacity_pct;
+      mapSpot.capacity_status = spot.capacity_status;
+      mapSpot.capacity_recorded_at = spot.capacity_recorded_at;
+      mapSpot.alert_threshold_pct = spot.alert_threshold_pct;
+    }
+
+    return mapSpot;
   }
 }
 

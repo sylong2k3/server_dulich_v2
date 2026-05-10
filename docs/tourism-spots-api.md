@@ -213,6 +213,44 @@ GET /api/v1/spots/map?lang=en&lat=20.25&lng=105.97&radius_km=10&province_code=37
 
 ---
 
+**Response rut gon cho ban do:**
+
+```json
+{
+  "spots": [
+    {
+      "id": "uuid",
+      "slug": "trang-an",
+      "name": "Trang An",
+      "geom": {
+        "type": "Point",
+        "coordinates": [105.97, 20.25]
+      },
+      "distance_m": 1234.56,
+      "category_id": 3,
+      "category_name": "Khu du lich sinh thai",
+      "category_icon": "/uploads/icons/ecotourism.svg",
+      "province_name": "Ninh Binh",
+      "commune_name": "Xa Truong Yen",
+      "max_capacity": 1000,
+      "current_visitor_count": 650,
+      "current_capacity_pct": "65.00",
+      "capacity_status": "busy",
+      "capacity_recorded_at": "2026-05-10T09:00:00.000Z",
+      "alert_threshold_pct": "80.00"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 500,
+    "total": 100,
+    "totalPages": 1
+  }
+}
+```
+
+---
+
 ### 4. Chi tiết theo slug
 
 ```http

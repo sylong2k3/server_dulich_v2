@@ -165,6 +165,7 @@ class SpotRepository {
         ts.category_id,
         ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
         sc.parent_id AS category_parent_id,
+        sc.icon_url AS category_icon,
         ${localizedSQL(lang, 'scp.name_vi', 'scp.name_en', 'category_parent_name')},
         ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
         ${localizedSQL(lang, 'cm.name', 'cm.name_en', 'commune_name')},
