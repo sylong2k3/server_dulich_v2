@@ -154,8 +154,8 @@
 | GET | `/current` | Tải hiện tại tất cả điểm | Public |
 | GET | `/current/geojson` | GeoJSON tải điểm | Public |
 | GET | `/stream` | SSE stream real-time | Public |
-| GET | `/spots/:spotId/history` | Lịch sử tải | Required |
-| GET | `/spots/:spotId/stats` | Thống kê tải | `capacity:read` |
+| GET | `/spots/:spotId/history` | Lịch sử tải | Public |
+| GET | `/spots/:spotId/stats` | Thống kê tải | Public |
 | GET | `/spots/:spotId/alternatives` | Gợi ý điểm thay thế | Public |
 | POST | `/spots/:spotId/log` | Ghi nhận tải mới | `capacity:create` |
 | GET | `/configs` | Cấu hình cảnh báo | `capacity:read` |

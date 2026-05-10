@@ -11,6 +11,12 @@ const logCapacitySchema = Joi.object({
     data_source: Joi.string().valid('manual', 'iot', 'api', 'realtime').default('manual'),
 });
 
+// Cấu hình sức chứa tối đa của điểm du lịch
+const spotCapacitySettingsSchema = Joi.object({
+    max_capacity: Joi.number().integer().min(1).required(),
+    alert_threshold_pct: Joi.number().integer().min(1).max(100).optional(),
+});
+
 const alertConfigSchema = Joi.object({
     spot_id: uuidSchema.optional().allow(null),
     province_code: Joi.string().trim().max(20).optional().allow(null),
@@ -43,8 +49,10 @@ const alternativesQuerySchema = Joi.object({
 module.exports = {
     spotIdParamSchema,
     logCapacitySchema,
+    spotCapacitySettingsSchema,
     alertConfigSchema,
     historyQuerySchema,
     statsQuerySchema,
     alternativesQuerySchema,
 };
+

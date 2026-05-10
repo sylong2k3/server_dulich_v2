@@ -34,6 +34,11 @@ class CapacityController {
     return CREATED(res, 'Ghi nhận tải trọng thành công', { log });
   });
 
+  static updateSpotSettings = asyncHandler(async (req, res) => {
+    const settings = await capacityService.updateSpotSettings(req.params.spotId, req.body);
+    return OK(res, 'Cập nhật cấu hình sức chứa điểm du lịch thành công', { settings });
+  });
+
   static getSuggestedAlternatives = asyncHandler(async (req, res) => {
     const alternatives = await capacityService.getSuggestedAlternatives(req.params.spotId, {
       radius_km: Number(req.query.radius_km) || 10,

@@ -143,6 +143,44 @@ class CapacityService {
     return CapacityRepository.upsertAlertConfig(data);
   }
 
+  async updateSpotSettings(spotId, data) {
+    await FKValidator.spot(spotId);
+    
+    const { query: dbQuery } = require('../configs/database');
+    
+    const updates = [];
+    const values = [];
+    let paramIdx = 1;
+
+    if (data.max_capacity !== undefined) {
+      updates.push(`max_capacity = $${paramIdx++}`);
+      values.push(data.max_capacity);
+    }
+    
+    if (data.alert_threshold_pct !== undefined) {
+      updates.push(`alert_threshold_pct = $${paramIdx++}`);
+      values.push(data.alert_threshold_pct);
+    }
+
+    if (updates.length === 0) return null;
+
+    values.push(spotId);
+    
+    const sql = `
+      UPDATE tourism_spots 
+      SET ${updates.join(', ')}, updated_at = NOW() 
+      WHERE id = $${paramIdx} 
+      RETURNING max_capacity, alert_threshold_pct
+    `;
+
+    const { rows } = await dbQuery(sql, values);
+    
+    invalidateByPrefix('spots:');
+    invalidateByPrefix('capacity:');
+    
+    return rows[0];
+  }
+
   // ==================== SSE ====================
 
   /**

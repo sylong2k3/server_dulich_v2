@@ -6,6 +6,7 @@ const { validateBody, validateParams, validateQuery } = require('../middlewares/
 const {
     spotIdParamSchema,
     logCapacitySchema,
+    spotCapacitySettingsSchema,
     alertConfigSchema,
     historyQuerySchema,
     statsQuerySchema,
@@ -33,6 +34,9 @@ router.get('/spots/:spotId/alternatives', validateParams(spotIdParamSchema), val
 // Protected — ghi nhận tải (Operator) — NV-17
 // ROUTE: POST /spots/:spotId/log - Tạo/Gửi sức chứa và mật độ khách. Xử lý bởi CapacityController.logCapacity. Truy cập: yêu cầu đăng nhập, cần quyền capacity:create.
 router.post('/spots/:spotId/log', authenticateToken, checkPermission('capacity', 'create'), validateParams(spotIdParamSchema), validateBody(logCapacitySchema), CapacityController.logCapacity );
+
+// ROUTE: PATCH /spots/:spotId/settings - Cấu hình sức chứa tối đa. Xử lý bởi CapacityController.updateSpotSettings. Truy cập: yêu cầu đăng nhập, cần quyền capacity:create.
+router.patch('/spots/:spotId/settings', authenticateToken, checkPermission('capacity', 'create'), validateParams(spotIdParamSchema), validateBody(spotCapacitySettingsSchema), CapacityController.updateSpotSettings);
 
 // Admin — cấu hình cảnh báo
 // ROUTE: GET /configs - Truy vấn sức chứa và mật độ khách. Xử lý bởi CapacityController.getAlertConfigs. Truy cập: yêu cầu đăng nhập, cần quyền capacity:read.
