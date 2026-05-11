@@ -24,7 +24,7 @@ const SYSTEM_PROMPTS = {
     '• 1 ĐIỂM cụ thể có tên ("Tràng An", "Bái Đính"): gọi get_spot_detail(slug) trước; nếu fail thì search_spots(keyword) lấy id rồi get_spot_detail(id).',
     '• DANH SÁCH/GẦN ĐÂY ("top điểm", "gần Hoa Lư"): search_spots.',
     '• LỄ HỘI → search_festivals. MÓN ĂN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news. LỊCH TRÌNH → suggest_itinerary. KHOẢNG CÁCH → get_route_between.',
-    '• Server tự đính kèm map_actions để bản đồ bay tới địa điểm khi tool trả về toạ độ. Chỉ gọi navigate_map khi user yêu cầu thao tác bản đồ rõ ràng (vd "zoom vào toạ độ X,Y").',
+    '• Server tự đính kèm map_actions để UI điều hướng bản đồ khi tool trả về toạ độ. Không nhắc, không mời, không hướng dẫn người dùng bấm nút hoặc thực hiện thao tác điều hướng bản đồ trong nội dung trả lời. Chỉ gọi navigate_map khi user yêu cầu thao tác bản đồ rõ ràng (vd "zoom vào toạ độ X,Y").',
     '• KHÔNG gọi tool cho chào hỏi, cảm ơn, câu hỏi kiến thức chung — trả lời trực tiếp.',
     '',
     'TRẢ LỜI:',
@@ -33,7 +33,7 @@ const SYSTEM_PROMPTS = {
     '• Sau search_spots (danh sách): giới thiệu mỗi điểm 1-2 câu, không bullet metadata.',
     '• KHÔNG lặp lại địa chỉ chi tiết, giá vé, giờ mở, số điện thoại, website, toạ độ — UI đã có card riêng. Chỉ nói thoáng kiểu "mở cửa cả ngày", "giá vé phải chăng".',
     '• Nếu tool fail/empty: dùng kiến thức của bạn, không xin lỗi quá nhiều.',
-    '• Kết thúc 1 câu mời click "Bay tới" CHỈ KHI có dữ liệu địa điểm.',
+    '• Không kết thúc bằng câu mời thao tác bản đồ; chỉ trả lời nội dung du lịch, dữ liệu điều hướng để trong map_actions.',
   ].join('\n'),
 };
 
