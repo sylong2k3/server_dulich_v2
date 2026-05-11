@@ -252,22 +252,25 @@ class ItineraryRepository {
      */
     static async calcTotalDistance(itineraryId) {
         const sql = `
+            WITH ordered_stops AS (
+                SELECT
+                    COALESCE(ts.geom, bs.geom) AS geom,
+                    LEAD(COALESCE(ts.geom, bs.geom)) OVER (
+                        ORDER BY d.day_number, s.sort_order
+                    ) AS next_geom
+                FROM itinerary_days d
+                JOIN itinerary_stops s ON s.day_id = d.id
+                LEFT JOIN tourism_spots ts ON ts.id = s.spot_id
+                LEFT JOIN businesses bs ON bs.id = s.business_id
+                WHERE d.itinerary_id = $1
+                  AND COALESCE(ts.geom, bs.geom) IS NOT NULL
+            )
             SELECT ROUND(
-                SUM(
-                    ST_Distance(
-                        COALESCE(ts.geom, bs.geom)::geography,
-                        LEAD(COALESCE(ts.geom, bs.geom)) OVER (
-                            PARTITION BY d.itinerary_id ORDER BY d.day_number, s.sort_order
-                        )::geography
-                    ) / 1000
-                )::numeric, 2
+                SUM(ST_Distance(geom::geography, next_geom::geography) / 1000)::numeric,
+                2
             ) AS total_km
-            FROM itinerary_days d
-            JOIN itinerary_stops s ON s.day_id = d.id
-            LEFT JOIN tourism_spots ts ON ts.id = s.spot_id
-            LEFT JOIN businesses bs ON bs.id = s.business_id
-            WHERE d.itinerary_id = $1
-              AND COALESCE(ts.geom, bs.geom) IS NOT NULL
+            FROM ordered_stops
+            WHERE next_geom IS NOT NULL
         `;
         const { rows } = await query(sql, [itineraryId]);
         return rows[0]?.total_km ? Number(rows[0].total_km) : null;

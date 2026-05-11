@@ -8,6 +8,7 @@
  *                 navigate_map với fit_bounds / highlight đúng dữ liệu vừa lấy.
  *
  * map_actions hỗ trợ (frontend tự render theo thư viện map đang dùng):
+ *   fly_to        { center: [lng, lat], zoom?, label? }
  *   pan            { center: [lng, lat] }
  *   zoom           { zoom: number }
  *   highlight      { spot_ids: string[] }
@@ -53,6 +54,17 @@ function safeParse(s) {
   try { return JSON.parse(s); } catch { return null; }
 }
 
+function firstValue(...values) {
+  return values.find(v => v !== undefined && v !== null && v !== '');
+}
+
+function slugToSearchText(slug) {
+  return String(slug || '')
+    .trim()
+    .replace(/^-+|-+$/g, '')
+    .replace(/-/g, ' ');
+}
+
 /** Tính bounds [[minLng,minLat],[maxLng,maxLat]] từ list rows có toạ độ. */
 function computeBounds(rows = []) {
   const points = rows.map(pickLngLat).filter(Boolean);
@@ -70,13 +82,14 @@ function computeBounds(rows = []) {
 
 /** Chuẩn hoá item nhẹ (cho tool result) — bỏ field nặng/không cần cho AI. */
 function trimSpot(s) {
+  if (!s) return null;
   const [lng, lat] = pickLngLat(s) || [null, null];
   return {
     id: s.id,
     slug: s.slug,
-    name_vi: s.name_vi,
+    name_vi: firstValue(s.name_vi, s.name, s.title),
     name_en: s.name_en,
-    category: s.category_name || s.category || null,
+    category: firstValue(s.category_name, s.category, null),
     province: s.province_name || null,
     rating_avg: s.rating_avg ?? null,
     rating_count: s.rating_count ?? 0,
@@ -127,6 +140,83 @@ function trimNews(n) {
   return {
     id: n.id, title: n.title, slug: n.slug, excerpt: n.excerpt,
     cover_image_url: n.cover_image_url, published_at: n.published_at,
+  };
+}
+
+// ─── Tool-specific helpers ───────────────────────────────────────────────────
+
+async function findSpotDetail({ id, slug }) {
+  if (id) return SpotService.getSpotById(id);
+
+  const normalizedSlug = String(slug || '').trim();
+  if (!normalizedSlug) return null;
+
+  try {
+    return await SpotService.getSpotBySlug(normalizedSlug);
+  } catch (_) {
+    // The model often sends short slugs like "trang-an"; DB slugs can be longer.
+  }
+
+  const searchTerms = [...new Set([normalizedSlug, slugToSearchText(normalizedSlug)].filter(Boolean))];
+  for (const search of searchTerms) {
+    const { spots = [] } = await SpotService.getAllSpots({
+      page: 1,
+      limit: 5,
+      search,
+      sortBy: 'rating_avg',
+      sortOrder: 'DESC',
+    });
+    const candidate = spots.find(s => s.slug === normalizedSlug)
+      || spots.find(s => String(s.slug || '').includes(normalizedSlug))
+      || spots[0];
+    if (candidate?.id) {
+      return SpotService.getSpotById(candidate.id);
+    }
+  }
+
+  return null;
+}
+
+function buildFallbackItinerary({ num_days, preferences = [], budget_vnd, start_location }, spots = []) {
+  const daysCount = Math.min(14, Math.max(1, Number(num_days) || 1));
+  const usableSpots = spots.length ? spots : [
+    { name_vi: 'Tràng An' },
+    { name_vi: 'Hoa Lư' },
+    { name_vi: 'Tam Cốc - Bích Động' },
+    { name_vi: 'Chùa Bái Đính' },
+  ];
+
+  const days = Array.from({ length: daysCount }, (_, index) => {
+    const start = (index * 3) % usableSpots.length;
+    const daySpots = Array.from({ length: Math.min(3, usableSpots.length) }, (_, offset) => {
+      const spot = usableSpots[(start + offset) % usableSpots.length];
+      return {
+        spot_id: spot.id || null,
+        name: firstValue(spot.name_vi, spot.name, spot.slug, `Điểm ${offset + 1}`),
+        slug: spot.slug || null,
+      };
+    });
+
+    return {
+      day_number: index + 1,
+      title: `Ngày ${index + 1}: ${daySpots.map(s => s.name).join(' - ')}`,
+      stops_count: daySpots.length,
+      stops: daySpots,
+    };
+  });
+
+  const prefText = preferences.length ? ` theo sở thích ${preferences.join(', ')}` : '';
+  const budgetText = budget_vnd ? `, ngân sách khoảng ${Number(budget_vnd).toLocaleString('vi-VN')} VNĐ` : '';
+  const startText = start_location ? ` từ ${start_location}` : '';
+
+  return {
+    id: null,
+    persisted: false,
+    title: `Lịch trình ${daysCount} ngày khám phá Ninh Bình`,
+    description: `Gợi ý lịch trình nháp${startText}${prefText}${budgetText}.`,
+    total_days: daysCount,
+    total_distance_km: null,
+    days,
   };
 }
 
@@ -314,14 +404,14 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'navigate_map',
-      description: 'Điều khiển bản đồ ở UI client. LUÔN gọi sau search_* để hiển thị kết quả trực quan. Nhiều điểm → fit_bounds; 1 điểm → pan + show_popup.',
+      description: 'Điều khiển bản đồ ở UI client. Nhiều điểm → fit_bounds; 1 điểm → fly_to hoặc pan + show_popup.',
       parameters: {
         type: 'object',
         required: ['action'],
         properties: {
           action: {
             type: 'string',
-            enum: ['pan', 'zoom', 'highlight', 'add_marker', 'fit_bounds', 'draw_route', 'clear_markers', 'show_popup', 'filter_layer'],
+            enum: ['fly_to', 'pan', 'zoom', 'highlight', 'add_marker', 'fit_bounds', 'draw_route', 'clear_markers', 'show_popup', 'filter_layer'],
           },
           center: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: '[lng, lat]' },
           zoom: { type: 'integer', minimum: 1, maximum: 20 },
@@ -360,10 +450,11 @@ const HANDLERS = {
       rows = await SpotService.getNearbySpots(lat, lng, radius_km, limit);
       if (keyword) {
         const kw = String(keyword).toLowerCase();
-        rows = rows.filter(s =>
-          (s.name_vi || '').toLowerCase().includes(kw) ||
-          (s.name_en || '').toLowerCase().includes(kw)
-        );
+        rows = rows.filter(s => [s.name_vi, s.name_en, s.name, s.slug]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(kw));
       }
     } else {
       const { spots } = await SpotService.getAllSpots({
@@ -395,15 +486,14 @@ const HANDLERS = {
   async get_spot_detail(args) {
     const { id, slug } = args;
     if (!id && !slug) return { error: 'Cần truyền id hoặc slug' };
-    const spot = id
-      ? await SpotService.getSpotById(id)
-      : await SpotService.getSpotBySlug(slug);
+    const spot = await findSpotDetail({ id, slug });
+    if (!spot) return { error: 'Không tìm thấy điểm du lịch' };
     const trimmed = trimSpot(spot);
     return {
       item: {
         ...trimmed,
-        description_vi: spot.description_vi,
-        address_vi: spot.address_vi,
+        description_vi: firstValue(spot.description_vi, spot.description),
+        address_vi: firstValue(spot.address_vi, spot.address),
         opening_hours: spot.opening_hours,
         ticket_price_child: spot.ticket_price_child,
         phone: spot.phone,
@@ -501,16 +591,36 @@ const HANDLERS = {
   async suggest_itinerary(args, { userId } = {}) {
     const { num_days, preferences = [], budget_vnd, start_location } = args;
     if (!userId) {
-      return { error: 'Tính năng tạo lịch trình yêu cầu đăng nhập.' };
+      const { spots = [] } = await SpotService.getAllSpots({
+        page: 1,
+        limit: Math.min(12, Math.max(4, (Number(num_days) || 1) * 3)),
+        sortBy: 'rating_avg',
+        sortOrder: 'DESC',
+      });
+      return { item: buildFallbackItinerary({ num_days, preferences, budget_vnd, start_location }, spots) };
     }
-    const itinerary = await ItineraryAiService.generate(
-      { num_days, preferences, budget_vnd, start_location, language: 'vi' },
-      userId
-    );
+
+    let itinerary;
+    try {
+      itinerary = await ItineraryAiService.generate(
+        { num_days, preferences, budget_vnd, start_location, language: 'vi' },
+        userId
+      );
+    } catch (_) {
+      const { spots = [] } = await SpotService.getAllSpots({
+        page: 1,
+        limit: Math.min(12, Math.max(4, (Number(num_days) || 1) * 3)),
+        sortBy: 'rating_avg',
+        sortOrder: 'DESC',
+      });
+      return { item: buildFallbackItinerary({ num_days, preferences, budget_vnd, start_location }, spots) };
+    }
     return {
       item: {
         id: itinerary.id, title: itinerary.title, description: itinerary.description,
-        total_days: itinerary.total_days, total_distance_km: itinerary.total_distance_km,
+        total_days: itinerary.total_days || Number(num_days) || null,
+        total_distance_km: itinerary.total_distance_km,
+        persisted: true,
         days: (itinerary.days || []).map(d => ({
           day_number: d.day_number, title: d.title,
           stops_count: Array.isArray(d.stops) ? d.stops.length : undefined,

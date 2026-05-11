@@ -90,6 +90,7 @@ class SpotRepository {
         ts.search_vector @@ plainto_tsquery('simple', $${paramCount})
         OR ts.name_vi ILIKE $${paramCount + 1}
         OR ts.name_en ILIKE $${paramCount + 1}
+        OR ts.slug ILIKE $${paramCount + 1}
       )`;
       values.push(search, `%${search}%`);
       paramCount += 2;

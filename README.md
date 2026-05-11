@@ -211,7 +211,7 @@
 | Method | Path | Mô tả | Auth |
 |---|---|---|---|
 | GET | `/public` | Lịch trình công khai | Public |
-| GET | `/me` | Lịch trình của tôi | Required |
+| GET | `/my` | Lịch trình của tôi | Required |
 | POST | `/` | Tạo lịch trình | Required |
 | GET | `/:id` | Chi tiết | Optional |
 | PATCH | `/:id` | Cập nhật | Required |
