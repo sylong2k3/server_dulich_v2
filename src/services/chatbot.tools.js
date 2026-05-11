@@ -8,6 +8,7 @@
  *                 navigate_map với fit_bounds / highlight đúng dữ liệu vừa lấy.
  *
  * map_actions hỗ trợ (frontend tự render theo thư viện map đang dùng):
+ *   fly_to        { center: [lng, lat], zoom?, label? }
  *   pan            { center: [lng, lat] }
  *   zoom           { zoom: number }
  *   highlight      { spot_ids: string[] }
@@ -403,14 +404,14 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'navigate_map',
-      description: 'Điều khiển bản đồ ở UI client. LUÔN gọi sau search_* để hiển thị kết quả trực quan. Nhiều điểm → fit_bounds; 1 điểm → pan + show_popup.',
+      description: 'Điều khiển bản đồ ở UI client. Nhiều điểm → fit_bounds; 1 điểm → fly_to hoặc pan + show_popup.',
       parameters: {
         type: 'object',
         required: ['action'],
         properties: {
           action: {
             type: 'string',
-            enum: ['pan', 'zoom', 'highlight', 'add_marker', 'fit_bounds', 'draw_route', 'clear_markers', 'show_popup', 'filter_layer'],
+            enum: ['fly_to', 'pan', 'zoom', 'highlight', 'add_marker', 'fit_bounds', 'draw_route', 'clear_markers', 'show_popup', 'filter_layer'],
           },
           center: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: '[lng, lat]' },
           zoom: { type: 'integer', minimum: 1, maximum: 20 },

@@ -6,6 +6,8 @@ const { Api404Error, Api403Error, Api400Error } = require('../core/error.respons
 const HISTORY_LIMIT = 10;
 const MAX_TOOL_ITERATIONS = 6;
 const OPENAI_MODEL = process.env.OPENAI_CHATBOT_MODEL || 'gpt-4o-mini';
+const DEFAULT_FLY_TO_ZOOM = 15;
+const DEFAULT_MAP_PADDING = 80;
 
 const SYSTEM_PROMPTS = {
   manager: [
@@ -22,7 +24,7 @@ const SYSTEM_PROMPTS = {
     '• 1 ĐIỂM cụ thể có tên ("Tràng An", "Bái Đính"): gọi get_spot_detail(slug) trước; nếu fail thì search_spots(keyword) lấy id rồi get_spot_detail(id).',
     '• DANH SÁCH/GẦN ĐÂY ("top điểm", "gần Hoa Lư"): search_spots.',
     '• LỄ HỘI → search_festivals. MÓN ĂN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news. LỊCH TRÌNH → suggest_itinerary. KHOẢNG CÁCH → get_route_between.',
-    '• KHÔNG gọi navigate_map sau search_spots/get_spot_detail/search_festivals — UI tự render thẻ "Bay tới". Chỉ gọi navigate_map khi user yêu cầu thao tác bản đồ rõ ràng (vd "zoom vào toạ độ X,Y").',
+    '• Server tự đính kèm map_actions để bản đồ bay tới địa điểm khi tool trả về toạ độ. Chỉ gọi navigate_map khi user yêu cầu thao tác bản đồ rõ ràng (vd "zoom vào toạ độ X,Y").',
     '• KHÔNG gọi tool cho chào hỏi, cảm ơn, câu hỏi kiến thức chung — trả lời trực tiếp.',
     '',
     'TRẢ LỜI:',
@@ -93,10 +95,12 @@ async function runChatCompletion({ openaiMessages, tools, ctx }) {
 
   const finalize = (content) => {
     if (attachedById.size > 0) {
+      const attachedItems = Array.from(attachedById.values());
       mapActions.push({
         action: 'attach_items',
-        items: Array.from(attachedById.values()),
+        items: attachedItems,
       });
+      mapActions.push(...buildAutoMapActions(attachedItems));
     }
     return { content, mapActions, tokenUsage, toolCallTrace };
   };
@@ -171,6 +175,59 @@ function mergeUsage(prev, next) {
     completion_tokens: (prev.completion_tokens || 0) + (next.completion_tokens || 0),
     total_tokens: (prev.total_tokens || 0) + (next.total_tokens || 0),
   };
+}
+
+function isFiniteCoord(value) {
+  return Number.isFinite(Number(value));
+}
+
+function buildBounds(items) {
+  const points = items
+    .filter((it) => isFiniteCoord(it.lng) && isFiniteCoord(it.lat))
+    .map((it) => [Number(it.lng), Number(it.lat)]);
+  if (!points.length) return null;
+
+  let minLng = points[0][0];
+  let maxLng = points[0][0];
+  let minLat = points[0][1];
+  let maxLat = points[0][1];
+
+  for (const [lng, lat] of points) {
+    minLng = Math.min(minLng, lng);
+    maxLng = Math.max(maxLng, lng);
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+  }
+
+  return [[minLng, minLat], [maxLng, maxLat]];
+}
+
+function buildAutoMapActions(items) {
+  const validItems = items.filter((it) => isFiniteCoord(it.lng) && isFiniteCoord(it.lat));
+  if (!validItems.length) return [];
+
+  if (validItems.length === 1) {
+    const item = validItems[0];
+    return [{
+      action: 'fly_to',
+      center: [Number(item.lng), Number(item.lat)],
+      zoom: DEFAULT_FLY_TO_ZOOM,
+      item_id: item.id,
+      item_type: item.type,
+      label: item.name || item.location_name || null,
+    }];
+  }
+
+  const bounds = buildBounds(validItems);
+  if (!bounds) return [];
+
+  return [{
+    action: 'fit_bounds',
+    bounds,
+    padding: DEFAULT_MAP_PADDING,
+    item_ids: validItems.map((it) => it.id).filter(Boolean),
+    item_types: [...new Set(validItems.map((it) => it.type).filter(Boolean))],
+  }];
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
