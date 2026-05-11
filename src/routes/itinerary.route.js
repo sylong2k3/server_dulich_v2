@@ -26,8 +26,8 @@ router.get('/shared/:token', ItineraryController.getByShareToken);
 router.post('/ai-generate', authenticateToken, validateBody(aiGenerateSchema), ItineraryController.aiGenerate);
 
 // ==================== MY ITINERARIES ====================
-// ROUTE: GET / - Lấy toàn bộ danh sách cho quản trị lịch trình du lịch. Xử lý bởi ItineraryController.getAll. Truy cập: yêu cầu đăng nhập.
-router.get('/', authenticateToken, validateQuery(itineraryQuerySchema), ItineraryController.getAll);
+// ROUTE: GET /my - Lấy danh sách lịch trình của tôi. Xử lý bởi ItineraryController.getAll. Truy cập: yêu cầu đăng nhập.
+router.get('/my', authenticateToken, validateQuery(itineraryQuerySchema), ItineraryController.getAll);
 // ROUTE: POST / - Tạo mới lịch trình du lịch. Xử lý bởi ItineraryController.create. Truy cập: yêu cầu đăng nhập.
 router.post('/', authenticateToken, validateBody(createItinerarySchema), ItineraryController.create);
 

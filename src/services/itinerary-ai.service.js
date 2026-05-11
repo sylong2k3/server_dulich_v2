@@ -3,6 +3,8 @@ const { query } = require('../configs/database');
 const ItineraryRepository = require('../models/repositories/itinerary.repository');
 const { Api400Error } = require('../core/error.response');
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 class ItineraryAiService {
     /**
      * NV-28: Tạo lịch trình tự động bằng OpenAI.
@@ -72,7 +74,7 @@ Phản hồi PHẢI là JSON hợp lệ theo schema sau, không có markdown cod
         }
 
         // Lưu vào DB
-        const itinerary = await this._saveAiItinerary(plan, params, userId);
+        const itinerary = await this._saveAiItinerary(plan, params, userId, spots);
         return itinerary;
     }
 
@@ -136,7 +138,33 @@ Danh sách điểm du lịch:
 ${spotsInfo}`;
     }
 
-    async _saveAiItinerary(plan, params, userId) {
+    _normalizeSpotId(value, spots = []) {
+        if (value === undefined || value === null || value === '') return null;
+
+        const raw = String(value).trim();
+        if (!raw || raw.toLowerCase() === 'null') return null;
+        if (UUID_REGEX.test(raw)) return raw;
+
+        const ordinal = Number(raw);
+        if (Number.isInteger(ordinal) && ordinal >= 1 && ordinal <= spots.length) {
+            return spots[ordinal - 1]?.id || null;
+        }
+
+        return null;
+    }
+
+    _fallbackStopName(stop, spots = []) {
+        if (stop.custom_name) return stop.custom_name;
+
+        const ordinal = Number(String(stop.spot_id || '').trim());
+        if (Number.isInteger(ordinal) && ordinal >= 1 && ordinal <= spots.length) {
+            return spots[ordinal - 1]?.name_vi || null;
+        }
+
+        return null;
+    }
+
+    async _saveAiItinerary(plan, params, userId, spots = []) {
         // Tạo itinerary header
         const itinerary = await ItineraryRepository.create({
             user_id: userId,
@@ -162,10 +190,11 @@ ${spotsInfo}`;
             });
 
             for (const stop of (dayData.stops || [])) {
+                const spotId = this._normalizeSpotId(stop.spot_id, spots);
                 await ItineraryRepository.createStop({
                     day_id: day.id,
-                    spot_id: stop.spot_id || null,
-                    custom_name: stop.custom_name || null,
+                    spot_id: spotId,
+                    custom_name: spotId ? null : this._fallbackStopName(stop, spots),
                     sort_order: stop.sort_order || 1,
                     planned_arrival: stop.planned_arrival || null,
                     planned_duration_min: stop.planned_duration_min || null,
