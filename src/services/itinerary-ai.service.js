@@ -27,11 +27,12 @@ class ItineraryAiService {
 
         const prompt = this._buildPrompt({ num_days, preferences, budget_vnd, start_location, language, spots });
 
-        const openai = getOpenAIClient();
-
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
+        let response;
+        try {
+            const openai = getOpenAIClient();
+            response = await openai.chat.completions.create({
+                model: process.env.OPENAI_ITINERARY_MODEL || 'gpt-4o-mini',
+                messages: [
                 {
                     role: 'system',
                     content: `Bạn là chuyên gia du lịch Ninh Bình. Hãy tạo lịch trình du lịch chi tiết dựa trên thông tin được cung cấp.
@@ -59,11 +60,23 @@ Phản hồi PHẢI là JSON hợp lệ theo schema sau, không có markdown cod
 }`,
                 },
                 { role: 'user', content: prompt },
-            ],
-            temperature: 0.7,
-            max_tokens: 3000,
-            response_format: { type: 'json_object' },
-        });
+                ],
+                temperature: 0.7,
+                max_tokens: 3000,
+                response_format: { type: 'json_object' },
+            });
+        } catch (err) {
+            console.warn('[Itinerary AI] OpenAI failed, using fallback plan:', err.message);
+            response = {
+                choices: [{
+                    message: {
+                        content: JSON.stringify(
+                            this._buildFallbackPlan({ num_days, preferences, budget_vnd, start_location }, spots)
+                        ),
+                    },
+                }],
+            };
+        }
 
         const rawContent = response.choices[0]?.message?.content;
         let plan;
@@ -162,6 +175,48 @@ ${spotsInfo}`;
         }
 
         return null;
+    }
+
+    _buildFallbackPlan({ num_days, preferences = [], budget_vnd, start_location }, spots = []) {
+        const daysCount = Math.min(14, Math.max(1, Number(num_days) || 1));
+        const fallbackSpots = spots.length ? spots : [
+            { id: null, name_vi: 'Trang An' },
+            { id: null, name_vi: 'Hoa Lu' },
+            { id: null, name_vi: 'Tam Coc - Bich Dong' },
+            { id: null, name_vi: 'Chua Bai Dinh' },
+        ];
+
+        const days = Array.from({ length: daysCount }, (_, dayIndex) => {
+            const start = (dayIndex * 3) % fallbackSpots.length;
+            const daySpots = Array.from(
+                { length: Math.min(3, fallbackSpots.length) },
+                (_, stopIndex) => fallbackSpots[(start + stopIndex) % fallbackSpots.length]
+            );
+
+            return {
+                day_number: dayIndex + 1,
+                title: `Ngay ${dayIndex + 1}: ${daySpots.map((s) => s.name_vi).join(' - ')}`,
+                notes: null,
+                stops: daySpots.map((spot, stopIndex) => ({
+                    spot_id: spot.id || null,
+                    custom_name: spot.id ? null : spot.name_vi,
+                    planned_arrival: `${String(8 + stopIndex * 2).padStart(2, '0')}:00`,
+                    planned_duration_min: stopIndex === 1 ? 90 : 60,
+                    notes: null,
+                    sort_order: stopIndex + 1,
+                })),
+            };
+        });
+
+        const prefText = preferences.length ? ` theo so thich ${preferences.join(', ')}` : '';
+        const budgetText = budget_vnd ? `, ngan sach ${Number(budget_vnd).toLocaleString('vi-VN')} VND` : '';
+        const startText = start_location ? ` tu ${start_location}` : '';
+
+        return {
+            title: `Lich trinh ${daysCount} ngay kham pha Ninh Binh`,
+            description: `Goi y lich trinh du lich${startText}${prefText}${budgetText}.`,
+            days,
+        };
     }
 
     async _saveAiItinerary(plan, params, userId, spots = []) {

@@ -8,6 +8,11 @@ const MAX_TOOL_ITERATIONS = 6;
 const OPENAI_MODEL = process.env.OPENAI_CHATBOT_MODEL || 'gpt-4o-mini';
 const DEFAULT_FLY_TO_ZOOM = 15;
 const DEFAULT_MAP_PADDING = 80;
+const NDVI_LSTM_REGION_IMAGES = [
+  { label: 'Cúc Phương', url: '/uploads/images/cucphuong.jfif', keywords: ['cuc phuong', 'cucphuong'] },
+  { label: 'Hoa Lư', url: '/uploads/images/hoalu.jfif', keywords: ['hoa lu', 'hoalu'] },
+  { label: 'Xuân Thủy', url: '/uploads/images/xuanthuy.jfif', keywords: ['xuan thuy', 'xuanthuy'] },
+];
 
 const SYSTEM_PROMPTS = {
   manager: [
@@ -230,6 +235,53 @@ function buildAutoMapActions(items) {
   }];
 }
 
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+}
+
+function isNdviForecastQuestion(userMessage) {
+  const text = normalizeSearchText(userMessage);
+  const mentionsNdvi = /\bndvi\b/.test(text) || text.includes('chi so thuc vat') || text.includes('lstm');
+  if (!mentionsNdvi) return false;
+
+  const mentionsStatistics =
+    text.includes('thong ke') ||
+    text.includes('chi so') ||
+    text.includes('10 nam') ||
+    text.includes('muoi nam');
+  const mentionsForecast =
+    text.includes('du bao') ||
+    text.includes('ngan han') ||
+    text.includes('lstm');
+  const mentionsRegion = findNdviRegionImages(userMessage).length > 0;
+
+  return mentionsRegion || (mentionsStatistics && mentionsForecast);
+}
+
+function findNdviRegionImages(userMessage) {
+  const text = normalizeSearchText(userMessage);
+  return NDVI_LSTM_REGION_IMAGES.filter((image) =>
+    image.keywords.some((keyword) => text.includes(keyword))
+  );
+}
+
+function buildNdviForecastResponse(userMessage) {
+  const images = findNdviRegionImages(userMessage);
+  if (!images.length) {
+    return 'Bạn muốn xem ảnh NDVI LSTM của khu vực nào: Cúc Phương, Hoa Lư hay Xuân Thủy?';
+  }
+
+  return [
+    'Dưới đây là ảnh NDVI LSTM theo khu vực bạn hỏi:',
+    '',
+    ...images.map((image) => `![${image.label}](${image.url})`),
+  ].join('\n');
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 class ChatbotService {
@@ -282,6 +334,18 @@ class ChatbotService {
       role: 'user',
       content: userMessage,
     });
+
+    if (isNdviForecastQuestion(userMessage)) {
+      const content = buildNdviForecastResponse(userMessage);
+      const saved = await ChatbotRepository.saveMessage({
+        session_id: sessionId,
+        role: 'assistant',
+        content,
+        latency_ms: Date.now() - startedAt,
+      });
+
+      return { message: saved, map_actions: [] };
+    }
 
     // Lấy N tin nhắn GẦN NHẤT (bao gồm tin vừa lưu) làm context
     const history = await ChatbotRepository.getRecentMessages(sessionId, HISTORY_LIMIT);
