@@ -28,6 +28,8 @@ const routeMappings = [
   // Quản trị nâng cao
   { mountPath: "/governance", modulePath: "./governance.route" },
   { mountPath: "/map-admin", modulePath: "./map-admin.route" },
+  // Satellite
+  { mountPath: "/satellite", modulePath: "./satellite.route" },
   // Doanh nghiệp
   { mountPath: "/businesses", modulePath: "./business.route" },
   // Lịch trình & Tour
