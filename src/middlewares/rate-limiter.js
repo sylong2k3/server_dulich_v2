@@ -1,7 +1,10 @@
 const rateLimit = require("express-rate-limit");
 
+const skipInDevelopment = () => process.env.NODE_ENV === "development";
+
 // Rate limit cho login: 5 lần / 15 phút mỗi IP
 const loginLimiter = rateLimit({
+  skip: skipInDevelopment,
   windowMs: 15 * 60 * 1000,
   max: 5,
   message: {
@@ -15,6 +18,7 @@ const loginLimiter = rateLimit({
 
 // Rate limit cho register: 3 lần / 15 phút mỗi IP
 const registerLimiter = rateLimit({
+  skip: skipInDevelopment,
   windowMs: 15 * 60 * 1000,
   max: 3,
   message: {
@@ -28,6 +32,7 @@ const registerLimiter = rateLimit({
 
 // Rate limit cho refresh token: 10 lần / 15 phút mỗi IP
 const refreshLimiter = rateLimit({
+  skip: skipInDevelopment,
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: {
