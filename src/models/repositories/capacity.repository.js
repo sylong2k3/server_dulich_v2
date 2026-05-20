@@ -26,10 +26,14 @@ class CapacityRepository {
   /**
    * Tải trọng hiện tại tất cả spots (từ view v_current_capacity)
    */
-  static async getCurrentAll() {
+  static async getCurrentAll({ sortOrder = 'DESC' } = {}) {
+    const safeSortOrder = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     const sql = `
       ${this._currentCapacityBaseSql()}
-      ORDER BY cl.capacity_pct DESC NULLS LAST
+      ORDER BY
+        cl.capacity_pct ${safeSortOrder} NULLS LAST,
+        cl.visitor_count ${safeSortOrder} NULLS LAST,
+        ts.max_capacity ${safeSortOrder} NULLS LAST
     `;
     const { rows } = await query(sql);
     return rows;

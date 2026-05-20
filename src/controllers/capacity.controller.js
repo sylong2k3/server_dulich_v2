@@ -4,7 +4,7 @@ const { OK, CREATED } = require('../core/success.response');
 
 class CapacityController {
   static getCurrentAll = asyncHandler(async (req, res) => {
-    const data = await capacityService.getCurrentAll();
+    const data = await capacityService.getCurrentAll(req.query);
     return OK(res, 'Lấy tải trọng hiện tại thành công', { capacity: data });
   });
 

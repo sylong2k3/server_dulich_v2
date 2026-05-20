@@ -10,8 +10,9 @@ const FKValidator = require('../utils/fk-validator');
 const sseClients = new Set();
 
 class CapacityService {
-  async getCurrentAll() {
-    return cacheOrFetch('capacity:current', () => CapacityRepository.getCurrentAll(), 30);
+  async getCurrentAll(options = {}) {
+    const sortOrder = String(options.sortOrder || options.sort_order || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    return cacheOrFetch(`capacity:current:${sortOrder}`, () => CapacityRepository.getCurrentAll({ sortOrder }), 30);
   }
 
   async getCurrentGeoJSON() {
