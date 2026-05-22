@@ -38,7 +38,7 @@ class SpotCategoryRepository {
     const sql = `
       SELECT
         c.id, c.parent_id, c.code, c.name_vi, c.name_en,
-        c.icon_url, c.color_hex, c.sort_order, c.is_active,
+        c.icon_url, c.color_hex, c.sort_order, c.is_active, c.created_at,
         p.name_vi                        AS parent_name_vi,
         COUNT(*) OVER ()                 AS total_count,
         COALESCE(sc.spot_count, 0)       AS spot_count
@@ -73,13 +73,13 @@ class SpotCategoryRepository {
       WITH cat AS (
         SELECT
           c.id, c.parent_id, c.code, c.name_vi, c.name_en,
-          c.icon_url, c.color_hex, c.sort_order, c.is_active,
+          c.icon_url, c.color_hex, c.sort_order, c.is_active, c.created_at,
           COUNT(ts.id) AS spot_count
         FROM ${TABLE} c
         LEFT JOIN tourism_spots ts ON ts.category_id = c.id AND ts.status = 'active'
         ${activeClause}
         GROUP BY c.id, c.parent_id, c.code, c.name_vi, c.name_en,
-                 c.icon_url, c.color_hex, c.sort_order, c.is_active
+                 c.icon_url, c.color_hex, c.sort_order, c.is_active, c.created_at
         ORDER BY c.sort_order ASC, c.name_vi ASC
       )
       SELECT * FROM cat
@@ -119,7 +119,7 @@ class SpotCategoryRepository {
     const mainSql = `
       SELECT
         c.id, c.parent_id, c.code, c.name_vi, c.name_en,
-        c.icon_url, c.color_hex, c.sort_order, c.is_active,
+        c.icon_url, c.color_hex, c.sort_order, c.is_active, c.created_at,
         p.name_vi                  AS parent_name_vi,
         COALESCE(sc.spot_count, 0) AS spot_count
       FROM ${TABLE} c

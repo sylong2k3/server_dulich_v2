@@ -125,7 +125,8 @@ CREATE TABLE IF NOT EXISTS spot_categories (
     icon_url    TEXT,
     color_hex   VARCHAR(7),
     sort_order  INTEGER DEFAULT 0,
-    is_active   BOOLEAN DEFAULT TRUE
+    is_active   BOOLEAN DEFAULT TRUE,
+    created_at  TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS map_categories (
