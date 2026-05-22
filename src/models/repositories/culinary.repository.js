@@ -57,7 +57,7 @@ class CulinaryRepository {
                    c.category, c.description_vi AS description, c.recipe_vi AS recipe,
                    c.cover_image_url, c.media_urls, c.is_speciality,
                    c.rating_avg, c.rating_count,
-                   c.province_code, c.created_at, c.updated_at,
+                   c.province_code, c.created_at,
                    ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')}
             FROM cuisine_items c
             LEFT JOIN vn_units.provinces p ON c.province_code = p.code
