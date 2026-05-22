@@ -176,7 +176,7 @@ class BusinessRepository {
              ${localizedSQL(lang, 's.service_name_vi', 's.service_name_en', 'service_name')},
              s.description_vi,
              s.price_from, s.price_to, s.currency, s.unit,
-             s.booking_url, s.is_active, s.created_at, s.updated_at,
+             s.booking_url, s.is_active, s.created_at,
              COUNT(*) OVER() AS total_count
       FROM services s
       WHERE s.business_id = $1
