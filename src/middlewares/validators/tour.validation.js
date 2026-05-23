@@ -106,6 +106,18 @@ const createStopSchema = Joi.object({
 
 const updateStopSchema = Joi.object(stopBaseFields).min(1);
 
+const reorderStopsSchema = Joi.object({
+    day_number: Joi.number().integer().min(1),
+    stop_ids: Joi.array().items(uuid().required()).min(1),
+    stops: Joi.array().items(
+        Joi.object({
+            id: uuid().required(),
+            day_number: Joi.number().integer().min(1).required(),
+            stop_order: Joi.number().integer().min(1).required(),
+        })
+    ).min(1),
+}).xor('stop_ids', 'stops').with('stop_ids', 'day_number');
+
 module.exports = {
     idParamSchema,
     stopIdParamSchema,
@@ -115,4 +127,5 @@ module.exports = {
     updateTourSchema,
     createStopSchema,
     updateStopSchema,
+    reorderStopsSchema,
 };

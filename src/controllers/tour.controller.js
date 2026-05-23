@@ -64,6 +64,11 @@ class TourController {
         return OK(res, 'Cập nhật điểm dừng thành công', { stop });
     });
 
+    static reorderStops = asyncHandler(async (req, res) => {
+        const stops = await tourService.reorderStops(req.params.id, req.body, req.user);
+        return OK(res, 'Cập nhật thứ tự điểm dừng thành công', { stops });
+    });
+
     static deleteStop = asyncHandler(async (req, res) => {
         await tourService.deleteStop(req.params.id, req.params.stopId, req.user);
         return OK(res, 'Xóa điểm dừng thành công');

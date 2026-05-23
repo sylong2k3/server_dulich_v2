@@ -1,5 +1,5 @@
 const TourRepository = require('../models/repositories/tour.repository');
-const { Api404Error, Api409Error, Api403Error } = require('../core/error.response');
+const { Api400Error, Api404Error, Api409Error, Api403Error } = require('../core/error.response');
 const { formatPagination } = require('../utils/responseFormatter');
 const FKValidator = require('../utils/fk-validator');
 const { cacheOrFetch, invalidateByPrefix } = require('../utils/cache.utils');
@@ -192,6 +192,26 @@ class TourService {
         return result;
     }
 
+    async reorderStops(tourId, data, user) {
+        const tour = await TourRepository.findById(tourId);
+        if (!tour) throw new Api404Error('Không tìm thấy tour');
+        await this._checkOwnerOrAdmin(tour, user);
+
+        if (data.stop_ids) {
+            this._assertUnique(data.stop_ids, 'Danh sách điểm dừng bị trùng');
+        }
+
+        if (data.stops) {
+            this._assertUnique(data.stops.map((stop) => stop.id), 'Danh sách điểm dừng bị trùng');
+            const slots = data.stops.map((stop) => `${stop.day_number}:${stop.stop_order}`);
+            this._assertUnique(slots, 'Thứ tự điểm dừng bị trùng trong cùng ngày');
+        }
+
+        const stops = await TourRepository.reorderStops(tourId, data);
+        invalidateByPrefix('tours:');
+        return stops;
+    }
+
     // ==================== HELPERS ====================
 
     static #BYPASS_ROLES = new Set(['system_admin', 'department_manager']);
@@ -216,6 +236,12 @@ class TourService {
 
     _canManage(user) {
         return Boolean(user?.hasPermission?.('tours', 'update') || user?.hasPermission?.('tours', 'delete'));
+    }
+
+    _assertUnique(values, message) {
+        if (new Set(values).size !== values.length) {
+            throw new Api400Error(message);
+        }
     }
 }
 

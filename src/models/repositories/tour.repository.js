@@ -1,4 +1,5 @@
 const db = require('../../configs/database');
+const { Api400Error } = require('../../core/error.response');
 const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
 class TourRepository {
@@ -245,6 +246,91 @@ class TourRepository {
     const sql = `UPDATE tour_package_stops SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`;
     const result = await db.query(sql, params);
     return result.rows[0] || null;
+  }
+
+  static async reorderStops(tourPackageId, payload) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      const finalStops = payload.stop_ids
+        ? payload.stop_ids.map((id, index) => ({
+          id,
+          day_number: payload.day_number,
+          stop_order: index + 1,
+        }))
+        : payload.stops;
+
+      const requestedIds = finalStops.map((stop) => stop.id);
+      const currentResult = await client.query(
+        `SELECT id, day_number
+         FROM tour_package_stops
+         WHERE tour_package_id = $1 AND id = ANY($2::uuid[])`,
+        [tourPackageId, requestedIds]
+      );
+
+      if (currentResult.rowCount !== requestedIds.length) {
+        throw new Api400Error('Danh sách điểm dừng không thuộc tour này');
+      }
+
+      const affectedDays = [...new Set([
+        ...currentResult.rows.map((stop) => stop.day_number),
+        ...finalStops.map((stop) => stop.day_number),
+      ])];
+
+      const affectedResult = await client.query(
+        `SELECT id
+         FROM tour_package_stops
+         WHERE tour_package_id = $1 AND day_number = ANY($2::int[])`,
+        [tourPackageId, affectedDays]
+      );
+
+      const affectedIds = affectedResult.rows.map((stop) => stop.id);
+      if (affectedIds.length !== requestedIds.length || affectedIds.some((id) => !requestedIds.includes(id))) {
+        throw new Api400Error('Cần gửi đủ tất cả điểm dừng của các ngày bị thay đổi');
+      }
+
+      await client.query(
+        `UPDATE tour_package_stops AS s
+         SET stop_order = -tmp.temp_order
+         FROM (
+           SELECT id, row_number() OVER (ORDER BY id) AS temp_order
+           FROM tour_package_stops
+           WHERE tour_package_id = $1 AND id = ANY($2::uuid[])
+         ) AS tmp
+         WHERE s.id = tmp.id`,
+        [tourPackageId, requestedIds]
+      );
+
+      for (const stop of finalStops) {
+        await client.query(
+          `UPDATE tour_package_stops
+           SET day_number = $1, stop_order = $2
+           WHERE tour_package_id = $3 AND id = $4`,
+          [stop.day_number, stop.stop_order, tourPackageId, stop.id]
+        );
+      }
+
+      const result = await client.query(
+        `SELECT s.*,
+                ST_AsGeoJSON(COALESCE(ts.geom, bs.geom, ST_GeomFromText('POINT(0 0)', 4326)))::json AS geom_json,
+                ts.name_vi AS spot_name
+         FROM tour_package_stops s
+         LEFT JOIN tourism_spots ts ON s.spot_id = ts.id
+         LEFT JOIN businesses bs ON s.business_id = bs.id
+         WHERE s.tour_package_id = $1
+         ORDER BY s.day_number, s.stop_order`,
+        [tourPackageId]
+      );
+
+      await client.query('COMMIT');
+      return result.rows;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   static async deleteStop(id) {

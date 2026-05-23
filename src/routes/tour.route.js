@@ -12,6 +12,7 @@ const {
     updateTourSchema,
     createStopSchema,
     updateStopSchema,
+    reorderStopsSchema,
 } = require('../middlewares/validators/tour.validation');
 
 // ==================== ADMIN — phải đặt trước /:id để tránh conflict ====================
@@ -57,6 +58,8 @@ router.delete('/:id', authenticateToken, checkPermission('tours', 'delete'), val
 // ==================== STOPS ====================
 // ROUTE: POST /:id/stops - Tạo mới tour du lịch. Xử lý bởi TourController.addStop. Truy cập: yêu cầu đăng nhập, cần quyền tours:update.
 router.post('/:id/stops', authenticateToken, checkPermission('tours', 'update'), validateParams(idParamSchema), validateBody(createStopSchema), TourController.addStop );
+
+router.patch('/:id/stops/reorder', authenticateToken, checkPermission('tours', 'update'), validateParams(idParamSchema), validateBody(reorderStopsSchema), TourController.reorderStops );
 
 // ROUTE: PATCH /:id/stops/:stopId - Cập nhật tour du lịch. Xử lý bởi TourController.updateStop. Truy cập: yêu cầu đăng nhập, cần quyền tours:update.
 router.patch('/:id/stops/:stopId', authenticateToken, checkPermission('tours', 'update'), validateParams(stopIdParamSchema), validateBody(updateStopSchema), TourController.updateStop );
