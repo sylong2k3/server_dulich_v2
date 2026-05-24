@@ -122,6 +122,7 @@ class MapDataService {
         const { rows } = await query(sql, [safeLimit, offset]);
         return this._formatGeoJsonResponse(rows, 'capacity');
       },
+
     };
 
     // Tìm resolver theo slug

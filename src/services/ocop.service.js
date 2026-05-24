@@ -128,6 +128,10 @@ class OcopService {
     return cacheOrFetch('ocop:categories', () => OcopRepository.getCategories(), OCOP_CACHE_TTL);
   }
 
+  static async getOcopGeoJSON(query) {
+    return OcopRepository.getOcopGeoJSON(query);
+  }
+
   static canManage(viewer = {}) {
     return Boolean(viewer.user?.hasPermission?.('ocop', 'update') || viewer.user?.hasPermission?.('ocop', 'delete'));
   }
