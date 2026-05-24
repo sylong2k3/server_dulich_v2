@@ -6,6 +6,7 @@ const { Api404Error, Api403Error, Api400Error } = require('../core/error.respons
 const HISTORY_LIMIT = 10;
 const MAX_TOOL_ITERATIONS = 6;
 const OPENAI_MODEL = process.env.OPENAI_CHATBOT_MODEL || 'gpt-4o-mini';
+const ANONYMOUS_MESSAGE_LIMIT = Number(process.env.CHATBOT_ANONYMOUS_LIMIT) || 10;
 const DEFAULT_FLY_TO_ZOOM = 15;
 const DEFAULT_MAP_PADDING = 80;
 const NDVI_LSTM_REGION_IMAGES = [
@@ -315,9 +316,20 @@ class ChatbotService {
     });
   }
 
-  static async getUserSessions(userId, query) {
+  /**
+   * Danh sách phiên của actor: nếu có userId → query theo user_id; nếu chỉ có
+   * anonymousId → query theo context.anon_id. Không có cả 2 → throw 400.
+   */
+  static async listSessions({ userId, anonymousId }, query) {
+    if (!userId && !anonymousId) {
+      throw new Api400Error(
+        'Cần đăng nhập hoặc gửi header "x-anonymous-id" (UUID v4) để lấy danh sách phiên.'
+      );
+    }
     const { page = 1, limit = 20 } = query;
-    const { rows, total } = await ChatbotRepository.getUserSessions(userId, { page, limit });
+    const { rows, total } = userId
+      ? await ChatbotRepository.getUserSessions(userId, { page, limit })
+      : await ChatbotRepository.getAnonymousSessions(anonymousId, { page, limit });
     return {
       items: rows,
       pagination: { page: +page, limit: +limit, total, totalPages: Math.ceil(total / limit) },
@@ -340,6 +352,17 @@ class ChatbotService {
   static async sendMessage(sessionId, actor, userMessage) {
     const session = await ChatbotRepository.findSession(sessionId);
     assertSessionAccess(session, actor);
+
+    // Quota cho anonymous: chặn ngay khi vượt, KHÔNG lưu tin nhắn user mới.
+    if (!actor.userId && actor.anonymousId) {
+      const used = await ChatbotRepository.countAnonymousUserMessages(actor.anonymousId);
+      if (used >= ANONYMOUS_MESSAGE_LIMIT) {
+        throw new Api403Error(
+          `Bạn đã dùng hết ${ANONYMOUS_MESSAGE_LIMIT} câu hỏi miễn phí. Vui lòng đăng nhập để tiếp tục trò chuyện.`,
+          ['ANONYMOUS_QUOTA_EXCEEDED']
+        );
+      }
+    }
 
     const startedAt = Date.now();
 

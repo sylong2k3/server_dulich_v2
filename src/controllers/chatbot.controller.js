@@ -15,9 +15,9 @@ class ChatbotController {
     return CREATED(res, 'Phiên chat được tạo', result);
   });
 
-  // Danh sách phiên chat của user (yêu cầu login)
+  // Danh sách phiên chat của actor (đã login hoặc anonymous theo x-anonymous-id)
   static getSessions = asyncHandler(async (req, res) => {
-    const result = await ChatbotService.getUserSessions(req.user.id, req.query);
+    const result = await ChatbotService.listSessions(actorFrom(req), req.query);
     return OK(res, 'Danh sách phiên chat', result);
   });
 

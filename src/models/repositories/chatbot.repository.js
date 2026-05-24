@@ -33,6 +33,42 @@ class ChatbotRepository {
   }
 
   /**
+   * Đếm tổng số tin nhắn role='user' đã gửi qua các phiên anonymous của
+   * một anon_id — dùng để áp quota cho người chưa đăng nhập.
+   */
+  static async countAnonymousUserMessages(anonymousId) {
+    const { rows } = await pool.query(
+      `SELECT COUNT(m.id)::int AS n
+       FROM ai_chat_messages m
+       JOIN ai_chat_sessions s ON s.id = m.session_id
+       WHERE s.user_id IS NULL
+         AND s.context->>'anon_id' = $1
+         AND m.role = 'user'`,
+      [anonymousId]
+    );
+    return rows[0]?.n || 0;
+  }
+
+  /**
+   * Danh sách phiên chat của một anonymous client — lọc theo anon_id lưu trong
+   * cột JSON context. Chỉ trả về phiên có user_id NULL để khỏi rò rỉ phiên login.
+   */
+  static async getAnonymousSessions(anonymousId, { page = 1, limit = 20 } = {}) {
+    const offset = (page - 1) * limit;
+    const { rows } = await pool.query(
+      `SELECT *, COUNT(*) OVER() AS total_count
+       FROM ai_chat_sessions
+       WHERE user_id IS NULL
+         AND context->>'anon_id' = $1
+       ORDER BY last_message_at DESC
+       LIMIT $2 OFFSET $3`,
+      [anonymousId, limit, offset]
+    );
+    const total = rows[0] ? parseInt(rows[0].total_count) : 0;
+    return { rows: rows.map(({ total_count, ...r }) => r), total };
+  }
+
+  /**
    * Lưu tin nhắn + cập nhật last_message_at trong CÙNG transaction để tránh
    * trạng thái không nhất quán nếu UPDATE fail.
    */
