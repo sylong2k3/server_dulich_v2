@@ -171,7 +171,7 @@ class SpotService {
   // Gọi từ rating service sau khi tạo/xóa rating
   async recalculateRating(spotId) {
     const result = await SpotRepository.updateRatingStats(spotId);
-    invalidateByPrefix('spots:');
+    invalidateByPrefix('spot:');
     return result;
   }
 
@@ -204,7 +204,7 @@ class SpotService {
     // Sinh QR code trỏ đến trang chi tiết điểm DL
     this._generateAndSaveQrCode(spot.id, spot.slug).catch(() => { });
 
-    invalidateByPrefix('spots:');
+    invalidateByPrefix('spot:');
     invalidateByPrefix('spot-categories:');
     return spot;
   }
@@ -245,7 +245,7 @@ class SpotService {
     }
 
     const spot = await SpotRepository.updateSpot(id, data);
-    invalidateByPrefix('spots:');
+    invalidateByPrefix('spot:');
     invalidateByPrefix('spot-categories:');
     return spot;
   }
@@ -259,7 +259,7 @@ class SpotService {
     // Kiểm tra quyền sở hữu (system_admin / so_vhtt bypass)
     this._assertOwnerOrAdmin(existing, user);
     const result = await SpotRepository.softDelete(id);
-    invalidateByPrefix('spots:');
+    invalidateByPrefix('spot:');
     invalidateByPrefix('spot-categories:');
     return result;
   }
@@ -270,7 +270,7 @@ class SpotService {
       throw new Api404Error('Điểm du lịch không tồn tại');
     }
     const result = await SpotRepository.toggleFeatured(id);
-    invalidateByPrefix('spots:');
+    invalidateByPrefix('spot:');
     return result;
   }
 
@@ -332,7 +332,7 @@ class SpotService {
       throw new Api404Error('Media không tồn tại hoặc không thuộc điểm du lịch này');
     }
     const result = await SpotRepository.setPrimaryMedia(spotId, mediaId);
-    invalidateByPrefix('spots:');
+    invalidateByPrefix('spot:');
     return result;
   }
 

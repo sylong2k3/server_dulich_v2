@@ -179,7 +179,7 @@ class CapacityService {
 
     const { rows } = await dbQuery(sql, values);
     
-    invalidateByPrefix('spots:');
+    invalidateByPrefix('spot:');
     invalidateByPrefix('capacity:');
     
     return rows[0];

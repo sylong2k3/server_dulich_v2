@@ -152,8 +152,7 @@ class AFrameService {
       spot_id: spotId,
       created_by: user?.id || null,
     });
-    invalidateByPrefix('spots:');
-    invalidateByPrefix(`spot:id:${spotId}`);
+    invalidateByPrefix('spot:');
     return mapSceneRow(scene);
   }
 
@@ -169,8 +168,7 @@ class AFrameService {
     if (Object.prototype.hasOwnProperty.call(data, 'is_active')) {
       await AFrameRepository.refreshSpotVrFlag(spotId);
     }
-    invalidateByPrefix('spots:');
-    invalidateByPrefix(`spot:id:${spotId}`);
+    invalidateByPrefix('spot:');
     return mapSceneRow(scene);
   }
 
@@ -185,8 +183,7 @@ class AFrameService {
     }
     const deleted = await AFrameRepository.deleteScene(sceneId);
     await AFrameRepository.refreshSpotVrFlag(spotId);
-    invalidateByPrefix('spots:');
-    invalidateByPrefix(`spot:id:${spotId}`);
+    invalidateByPrefix('spot:');
     return deleted;
   }
 
@@ -196,8 +193,7 @@ class AFrameService {
       throw new Api400Error('Không thể set main cho scene đang tắt');
     }
     const updated = await AFrameRepository.setMainScene(spotId, sceneId);
-    invalidateByPrefix('spots:');
-    invalidateByPrefix(`spot:id:${spotId}`);
+    invalidateByPrefix('spot:');
     return mapSceneRow(updated);
   }
 
@@ -222,8 +218,7 @@ class AFrameService {
     }
     const updated = await AFrameRepository.setSceneActive(sceneId, isActive);
     await AFrameRepository.refreshSpotVrFlag(spotId);
-    invalidateByPrefix('spots:');
-    invalidateByPrefix(`spot:id:${spotId}`);
+    invalidateByPrefix('spot:');
     return mapSceneRow(updated);
   }
 
