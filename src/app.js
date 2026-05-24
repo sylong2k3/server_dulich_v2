@@ -61,7 +61,7 @@ const corsOptions = {
   },
   credentials: corsAllowCredentials,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-anonymous-id"],
   exposedHeaders: ["Content-Range", "X-Content-Range"],
   maxAge: 86400,
 };

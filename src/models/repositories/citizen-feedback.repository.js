@@ -58,7 +58,7 @@ class CitizenFeedbackRepository {
       INSERT INTO citizen_feedbacks
         (title, content, latitude, longitude, location_text, priority, images,
          forest_loss_area_estimate_m2, user_id, status, moderation_status${hasCoords ? ', geom' : ''})
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','pending'${hasCoords ? ',ST_SetSRID(ST_MakePoint($4, $3), 4326)' : ''})
+      VALUES ($1,$2,$3::double precision,$4::double precision,$5,$6,$7,$8,$9,'pending','pending'${hasCoords ? ',ST_SetSRID(ST_MakePoint($4::double precision, $3::double precision), 4326)' : ''})
       RETURNING *
     `;
     const result = await db.query(sql, [
