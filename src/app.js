@@ -31,7 +31,7 @@ let allowedOrigins = corsOrigins
 const corsAllowCredentials = true;
 if (corsAllowCredentials && allowedOrigins.includes("*")) {
   allowedOrigins = ["http://localhost:5173", "http://localhost:5174", "http://103.163.119.247:22026",
-    "http://103.163.119.247:12026"
+    "http://103.163.119.247:12026", "https://dulich.tourismpj.pro.vn", "https://dulich.tourismpj.pro.vn "
   ];
 }
 
