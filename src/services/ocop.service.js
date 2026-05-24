@@ -9,7 +9,7 @@ const OCOP_CACHE_TTL = 60;
 class OcopService {
   // Public list — chỉ trả sản phẩm is_active=true, có cache 60s.
   static async getAll(query, viewer = {}) {
-    const { page = 1, limit = 12, search, category, star_rating, province_code, sortBy, sortOrder, lang: rawLang } = query;
+    const { page = 1, limit = 12, search, category, star_rating, province_code, spot_id, by_distance, radius_km, sortBy, sortOrder, lang: rawLang } = query;
     const lang = normalizeLang(rawLang);
     // Normalize cache key — chỉ dùng các filter ảnh hưởng đến kết quả
     const cacheKey = [
@@ -21,12 +21,15 @@ class OcopService {
       category || 'all',
       star_rating || '',
       search || '',
+      spot_id || 'all',
+      by_distance ? 'dist' : 'direct',
+      radius_km || '10',
       sortBy || 'created_at',
       sortOrder || 'DESC',
     ].join(':');
     const { rows, total } = await cacheOrFetch(
       cacheKey,
-      () => OcopRepository.findAll({ page, limit, search, category, star_rating, province_code, is_active: true, sortBy, sortOrder, lang }),
+      () => OcopRepository.findAll({ page, limit, search, category, star_rating, province_code, spot_id, by_distance, radius_km, is_active: true, sortBy, sortOrder, lang }),
       OCOP_CACHE_TTL,
     );
     return {
@@ -40,10 +43,10 @@ class OcopService {
    * traffic thấp, filter mở rộng (is_active, province_code).
    */
   static async getAdminAll(query) {
-    const { page = 1, limit = 20, search, category, star_rating, province_code, is_active, sortBy, sortOrder, lang: rawLang } = query;
+    const { page = 1, limit = 20, search, category, star_rating, province_code, spot_id, by_distance, radius_km, is_active, sortBy, sortOrder, lang: rawLang } = query;
     const lang = normalizeLang(rawLang);
     const { rows, total } = await OcopRepository.findAll({
-      page, limit, search, category, star_rating, province_code, is_active, sortBy, sortOrder, lang,
+      page, limit, search, category, star_rating, province_code, spot_id, by_distance, radius_km, is_active, sortBy, sortOrder, lang,
     });
     return {
       items: rows.map(({ total_count, ...item }) => item),
@@ -91,6 +94,7 @@ class OcopService {
     await FKValidator.all([
       FKValidator.business(data.business_id, 'approved'),
       FKValidator.province(data.province_code),
+      FKValidator.spot(data.spot_id),
     ]);
     const created = await OcopRepository.create(data);
     invalidateByPrefix('ocop:');
@@ -104,6 +108,7 @@ class OcopService {
     await FKValidator.all([
       FKValidator.business(data.business_id, 'approved'),
       FKValidator.province(data.province_code),
+      FKValidator.spot(data.spot_id),
     ]);
 
     const updated = await OcopRepository.update(id, data);

@@ -13,7 +13,7 @@ const logCapacitySchema = Joi.object({
 
 // Cấu hình sức chứa tối đa của điểm du lịch
 const spotCapacitySettingsSchema = Joi.object({
-    max_capacity: Joi.number().integer().min(1).required(),
+    max_capacity: Joi.number().integer().min(1).optional(),
     alert_threshold_pct: Joi.number().integer().min(1).max(100).optional(),
 });
 

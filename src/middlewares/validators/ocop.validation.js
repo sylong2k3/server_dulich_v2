@@ -17,6 +17,9 @@ const ocopQuerySchema = Joi.object({
     category: Joi.string().trim().max(50).optional(),
     star_rating: Joi.number().integer().min(3).max(5).optional(),
     province_code: provinceCodeField(),
+    spot_id: uuid().optional(),
+    by_distance: Joi.boolean().optional(),
+    radius_km: Joi.number().min(1).max(50).optional(),
     lang: Joi.string().valid('vi', 'en').optional(),
 });
 
@@ -32,6 +35,9 @@ const ocopAdminQuerySchema = Joi.object({
     star_rating: Joi.number().integer().min(3).max(5).optional(),
     province_code: provinceCodeField(),
     is_active: Joi.boolean().optional(),
+    spot_id: uuid().optional(),
+    by_distance: Joi.boolean().optional(),
+    radius_km: Joi.number().min(1).max(50).optional(),
     lang: Joi.string().valid('vi', 'en').optional(),
 });
 
@@ -53,6 +59,7 @@ const ocopBaseFields = {
     producer_name: Joi.string().trim().max(LIMITS.NAME_MAX).allow('', null),
     province_code: provinceCodeField(),
     business_id: uuid().allow(null),
+    spot_id: uuid().allow(null),
     is_active: Joi.boolean(),
 };
 

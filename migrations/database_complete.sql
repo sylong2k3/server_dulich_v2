@@ -708,6 +708,7 @@ CREATE TABLE IF NOT EXISTS festivals (
 CREATE TABLE IF NOT EXISTS ocop_products (
     id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     business_id      UUID REFERENCES businesses(id),
+    spot_id          UUID REFERENCES tourism_spots(id) ON DELETE SET NULL,
     province_code    VARCHAR(20) NOT NULL REFERENCES vn_units.provinces(code),
     name_vi          VARCHAR(255) NOT NULL,
     name_en          VARCHAR(255),
@@ -1121,6 +1122,7 @@ CREATE INDEX IF NOT EXISTS idx_festivals_province ON festivals(province_code);
 CREATE INDEX IF NOT EXISTS idx_ocop_province ON ocop_products(province_code);
 CREATE INDEX IF NOT EXISTS idx_ocop_stars    ON ocop_products(star_rating);
 CREATE INDEX IF NOT EXISTS idx_ocop_active   ON ocop_products(id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_ocop_spot      ON ocop_products(spot_id);
 
 CREATE INDEX IF NOT EXISTS idx_notif_user   ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notif_type   ON notifications(type);

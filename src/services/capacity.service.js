@@ -98,18 +98,21 @@ class CapacityService {
     notifyChannel('capacity', 'capacity_alert', alertPayload);
 
     // Ghi notification vào DB cho target_roles (nếu có config), mặc định gửi department_manager + ministry_manager
-    const targetRoleCodes = Array.isArray(config?.notify_roles) && config.notify_roles.length > 0
-      ? config.notify_roles
-      : ['department_manager', 'ministry_manager'];
+    let roleIds = [];
+    if (Array.isArray(config?.notify_roles) && config.notify_roles.length > 0) {
+      // config.notify_roles đã là mảng role ID (số nguyên) được cấu hình tùy chỉnh
+      roleIds = config.notify_roles.map((id) => Number(id)).filter(Boolean);
+    } else {
+      // Mặc định gửi cho department_manager + ministry_manager dựa theo code
+      const defaultRoleCodes = ['department_manager', 'ministry_manager'];
+      const { query: dbQuery } = require('../configs/database');
+      const { rows: roleRows } = await dbQuery(
+        `SELECT id FROM roles WHERE lower(code) = ANY($1::text[])`,
+        [defaultRoleCodes.map((c) => String(c).toLowerCase())],
+      );
+      roleIds = roleRows.map((r) => Number(r.id)).filter(Boolean);
+    }
 
-    // Lấy role IDs từ codes, rồi gửi bulk notification
-    const UserRepository = require('../models/repositories/user.repository');
-    const { query: dbQuery } = require('../configs/database');
-    const { rows: roleRows } = await dbQuery(
-      `SELECT id FROM roles WHERE lower(code) = ANY($1::text[])`,
-      [targetRoleCodes.map((c) => String(c).toLowerCase())],
-    );
-    const roleIds = roleRows.map((r) => Number(r.id)).filter(Boolean);
     if (roleIds.length > 0) {
       await NotificationService.createNotificationForRoleIds({
         type: 'capacity_alert',
@@ -202,6 +205,9 @@ class CapacityService {
     sseClients.forEach((client) => {
       try {
         client.write(data);
+        if (typeof client.flush === 'function') {
+          client.flush();
+        }
       } catch (err) {
         sseClients.delete(client);
       }

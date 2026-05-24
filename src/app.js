@@ -72,7 +72,17 @@ app.use(passport.initialize());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/uploads", express.static("public/uploads"));
-app.use(compression());
+app.use(
+  compression({
+    filter: (req, res) => {
+      // Bỏ qua nén đối với luồng real-time Server-Sent Events (SSE)
+      if (req.headers["accept"] === "text/event-stream" || res.getHeader("Content-Type") === "text/event-stream") {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  }),
+);
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));

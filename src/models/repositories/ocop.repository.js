@@ -2,7 +2,7 @@ const db = require('../../configs/database');
 const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
 class OcopRepository {
-    static async findAll({ page = 1, limit = 12, search, category, star_rating, province_code, business_id, is_active, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
+    static async findAll({ page = 1, limit = 12, search, category, star_rating, province_code, business_id, spot_id, by_distance, radius_km, is_active, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
         const lang = normalizeLang(rawLang);
         const offset = (page - 1) * limit;
         const params = [];
@@ -14,6 +14,16 @@ class OcopRepository {
         if (star_rating) { conditions.push(`o.star_rating = $${idx++}`); params.push(star_rating); }
         if (province_code) { conditions.push(`o.province_code = $${idx++}`); params.push(province_code); }
         if (business_id) { conditions.push(`o.business_id = $${idx++}`); params.push(business_id); }
+        if (spot_id) {
+            if (by_distance) {
+                const rad = parseFloat(radius_km) || 10;
+                conditions.push(`o.geom IS NOT NULL AND ST_DWithin(o.geom::geography, (SELECT geom FROM tourism_spots WHERE id = $${idx++})::geography, $${idx++} * 1000)`);
+                params.push(spot_id, rad);
+            } else {
+                conditions.push(`o.spot_id = $${idx++}`);
+                params.push(spot_id);
+            }
+        }
         if (search) {
             conditions.push(`(o.name_vi ILIKE $${idx} OR o.name_en ILIKE $${idx} OR o.description_vi ILIKE $${idx} OR o.producer_name ILIKE $${idx})`);
             params.push(`%${search}%`);
@@ -36,15 +46,17 @@ class OcopRepository {
                    o.category, o.description_vi AS description,
                    o.star_rating, o.certification_no, o.price_vnd, o.unit,
                    o.cover_image_url, o.media_urls, o.shop_url,
-                   o.producer_name, o.province_code, o.business_id,
+                   o.producer_name, o.province_code, o.business_id, o.spot_id,
                    o.is_active, o.created_at,
                    ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
                    b.business_name,
+                   s.name_vi AS spot_name,
                    ST_X(o.geom::geometry) AS lng, ST_Y(o.geom::geometry) AS lat,
                    COUNT(*) OVER() AS total_count
             FROM ocop_products o
             LEFT JOIN vn_units.provinces p ON o.province_code = p.code
             LEFT JOIN businesses b ON o.business_id = b.id
+            LEFT JOIN tourism_spots s ON o.spot_id = s.id
             ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
             ORDER BY ${orderClause}
             LIMIT $${idx++} OFFSET $${idx++}
@@ -62,14 +74,16 @@ class OcopRepository {
                    o.category, o.description_vi AS description,
                    o.star_rating, o.certification_no, o.certified_at,
                    o.price_vnd, o.unit, o.cover_image_url, o.media_urls, o.shop_url,
-                   o.producer_name, o.province_code, o.business_id,
+                   o.producer_name, o.province_code, o.business_id, o.spot_id,
                    o.is_active, o.created_at, o.updated_at,
                    ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
                    b.business_name,
+                   s.name_vi AS spot_name,
                    ST_X(o.geom::geometry) AS lng, ST_Y(o.geom::geometry) AS lat
             FROM ocop_products o
             LEFT JOIN vn_units.provinces p ON o.province_code = p.code
             LEFT JOIN businesses b ON o.business_id = b.id
+            LEFT JOIN tourism_spots s ON o.spot_id = s.id
             WHERE o.id = $1
         `;
         const result = await db.query(sql, [id]);
@@ -84,11 +98,11 @@ class OcopRepository {
                 star_rating, certification_no, certified_at,
                 cover_image_url, media_urls, price_vnd, unit, shop_url,
                 ${hasGeom ? 'geom,' : ''}
-                producer_name, province_code, business_id, is_active
+                producer_name, province_code, business_id, spot_id, is_active
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
                 ${hasGeom ? `ST_SetSRID(ST_MakePoint($13, $14), 4326),` : ''}
-                $${hasGeom ? 15 : 13}, $${hasGeom ? 16 : 14}, $${hasGeom ? 17 : 15}, $${hasGeom ? 18 : 16}
+                $${hasGeom ? 15 : 13}, $${hasGeom ? 16 : 14}, $${hasGeom ? 17 : 15}, $${hasGeom ? 18 : 16}, $${hasGeom ? 19 : 17}
             ) RETURNING *
         `;
         const base = [
@@ -110,6 +124,7 @@ class OcopRepository {
             data.producer_name || null,
             data.province_code,
             data.business_id || null,
+            data.spot_id || null,
             data.is_active ?? true,
         ];
         const result = await db.query(sql, [...base, ...geomValues, ...rest]);
@@ -121,7 +136,7 @@ class OcopRepository {
             'name_vi', 'name_en', 'category', 'description_vi',
             'star_rating', 'certification_no', 'certified_at',
             'cover_image_url', 'media_urls', 'price_vnd', 'unit', 'shop_url',
-            'producer_name', 'province_code', 'business_id', 'is_active',
+            'producer_name', 'province_code', 'business_id', 'spot_id', 'is_active',
         ];
         const sets = []; const params = []; let idx = 1;
         for (const key of allowed) {

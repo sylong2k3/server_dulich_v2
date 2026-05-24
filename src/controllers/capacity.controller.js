@@ -73,6 +73,9 @@ class CapacityController {
     });
 
     res.write(`data: ${JSON.stringify({ type: 'connected', message: 'Capacity stream connected' })}\n\n`);
+    if (typeof res.flush === 'function') {
+      res.flush();
+    }
 
     // Đăng ký client
     capacityService.registerSSEClient(res);
