@@ -546,22 +546,34 @@ const HANDLERS = {
     const minRating = Number.isFinite(Number(args.min_rating)) ? Number(args.min_rating) : 4;
     const featuredOnly = !!args.featured_only;
 
+    // Loại nhóm "Cơ sở vật chất kỹ thuật" (spot_categories.parent_id = 3) —
+    // bao gồm khách sạn, resort, nhà thuyền, ngân hàng, bệnh viện, ga tàu, v.v.
+    // Giữ parent 1 (du lịch tự nhiên) + 2 (du lịch văn hoá) + spot chưa có category.
+    const EXCLUDE_INFRASTRUCTURE = `
+      NOT EXISTS (
+        SELECT 1 FROM spot_categories sc
+        WHERE sc.id = s.category_id AND sc.parent_id = 3
+      )
+    `;
+
     // Lấy ngẫu nhiên 1 điểm. PostgreSQL ORDER BY RANDOM() OK với bảng cỡ vừa.
-    const conds = [`status = 'active'`, `rating_avg >= $1`];
+    const conds = [`s.status = 'active'`, EXCLUDE_INFRASTRUCTURE, `s.rating_avg >= $1`];
     const params = [minRating];
-    if (featuredOnly) conds.push('is_featured = true');
+    if (featuredOnly) conds.push('s.is_featured = true');
 
     let { rows } = await pool.query(
-      `SELECT id FROM tourism_spots
+      `SELECT s.id FROM tourism_spots s
        WHERE ${conds.join(' AND ')}
        ORDER BY RANDOM() LIMIT 1`,
       params
     );
 
-    // Fallback: nếu không có điểm nào đạt ngưỡng → nới rating
+    // Fallback: nếu không có điểm nào đạt ngưỡng → nới rating, vẫn loại parent=3
     if (!rows[0] && minRating > 0) {
       const fb = await pool.query(
-        `SELECT id FROM tourism_spots WHERE status='active' ORDER BY RANDOM() LIMIT 1`
+        `SELECT s.id FROM tourism_spots s
+         WHERE s.status='active' AND ${EXCLUDE_INFRASTRUCTURE}
+         ORDER BY RANDOM() LIMIT 1`
       );
       rows = fb.rows;
     }
