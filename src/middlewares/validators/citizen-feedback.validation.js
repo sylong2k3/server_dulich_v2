@@ -7,7 +7,7 @@ const {
   sortQuery,
   makeOptional,
 } = require('./common/base-schemas');
-const { idParamSchema } = require('./common/id-param.schema');
+const { uuidParamSchema: idParamSchema } = require('./common/id-param.schema');
 const { FEEDBACK_STATUS, FEEDBACK_MODERATION_STATUS, LIMITS } = require('./common/constants');
 const msg = require('./common/messages');
 const FEEDBACK_PRIORITY = ['low', 'normal', 'high', 'urgent'];
