@@ -320,21 +320,10 @@ class UserRepository {
     return new User(rows[0]);
   }
 
-  static async lockAccount(id) {
+  static async toggleAccountLock(id) {
     const sql = `
     UPDATE users
-    SET is_active = FALSE, updated_at = NOW()
-    WHERE id = $1
-    RETURNING *
-  `;
-    const { rows } = await query(sql, [id]);
-    return rows.length ? new User(rows[0]) : null;
-  }
-
-  static async unlockAccount(id) {
-    const sql = `
-    UPDATE users
-    SET is_active = TRUE, updated_at = NOW()
+    SET is_active = NOT is_active, updated_at = NOW()
     WHERE id = $1
     RETURNING *
   `;

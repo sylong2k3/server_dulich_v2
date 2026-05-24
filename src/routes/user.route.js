@@ -30,12 +30,8 @@ router.post( "/", authenticateToken, checkPermission("users", "create"), upload.
 // ROUTE: PUT /:id - Cập nhật người dùng. Xử lý bởi userController.updateUser. Truy cập: yêu cầu đăng nhập, cần quyền users:update.
 router.put( "/:id", authenticateToken, checkPermission("users", "update"), upload.single("avatar_url"), upload.process(), validateParams(userIdParamSchema), validateBody(updateUserSchema), userController.updateUser );
 
-// PUT /:id/lock  → khóa (idempotent)
-// DELETE /:id/lock → mở khóa (idempotent)
-// ROUTE: PUT /:id/lock - Cập nhật toàn phần người dùng. Xử lý bởi userController.lockUser. Truy cập: yêu cầu đăng nhập, cần quyền users:update.
-router.put( "/:id/lock", authenticateToken, checkPermission("users", "update"), validateParams(userIdParamSchema), userController.lockUser );
-// ROUTE: DELETE /:id/lock - Xóa/Vô hiệu hóa người dùng. Xử lý bởi userController.unlockUser. Truy cập: yêu cầu đăng nhập, cần quyền users:update.
-router.delete( "/:id/lock", authenticateToken, checkPermission("users", "update"), validateParams(userIdParamSchema), userController.unlockUser );
+// ROUTE: PATCH /:id/lock - Đảo trạng thái khoá/mở khoá tài khoản (toggle). Xử lý bởi userController.toggleUserLock. Truy cập: yêu cầu đăng nhập, cần quyền users:update.
+router.patch( "/:id/lock", authenticateToken, checkPermission("users", "update"), validateParams(userIdParamSchema), userController.toggleUserLock );
 
 // ROUTE: DELETE /batch - Xóa người dùng. Xử lý bởi userController.deleteUsersBatch. Truy cập: yêu cầu đăng nhập, cần quyền users:delete.
 router.delete( "/batch", authenticateToken, checkPermission("users", "delete"), validateBody(batchDeleteUsersSchema), userController.deleteUsersBatch );

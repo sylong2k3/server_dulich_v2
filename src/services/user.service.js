@@ -87,22 +87,13 @@ class UserService {
     return UserRepository.updateUser(id, updates);
   }
 
-  async unlockUserAccount(id) {
+  async toggleUserLock(id) {
     const user = await UserRepository.findUserById(id);
     if (!user) {
       throw new Api404Error("Người dùng không tồn tại");
     }
 
-    return UserRepository.unlockAccount(id);
-  }
-
-  async lockUserAccount(id) {
-    const user = await UserRepository.findUserById(id);
-    if (!user) {
-      throw new Api404Error("Người dùng không tồn tại");
-    }
-
-    return UserRepository.lockAccount(id);
+    return UserRepository.toggleAccountLock(id);
   }
 
   async hardDeleteUser(id) {

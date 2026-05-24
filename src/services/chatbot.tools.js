@@ -29,6 +29,9 @@ const NewsService = require('./news.service');
 const VlogService = require('./vlog.service');
 const ItineraryAiService = require('./itinerary-ai.service');
 const MapMeasureService = require('./map-measure.service');
+const { cacheOrFetch } = require('../utils/cache.utils');
+
+const SPOT_DETAIL_TTL = 120; // giây — đủ để gộp các tool call trong cùng 1 cuộc hội thoại
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -146,35 +149,41 @@ function trimNews(n) {
 // ─── Tool-specific helpers ───────────────────────────────────────────────────
 
 async function findSpotDetail({ id, slug }) {
-  if (id) return SpotService.getSpotById(id);
-
   const normalizedSlug = String(slug || '').trim();
-  if (!normalizedSlug) return null;
+  if (!id && !normalizedSlug) return null;
 
-  try {
-    return await SpotService.getSpotBySlug(normalizedSlug);
-  } catch (_) {
-    // The model often sends short slugs like "trang-an"; DB slugs can be longer.
-  }
+  const cacheKey = id
+    ? `chatbot:spot:id:${id}`
+    : `chatbot:spot:slug:${normalizedSlug.toLowerCase()}`;
 
-  const searchTerms = [...new Set([normalizedSlug, slugToSearchText(normalizedSlug)].filter(Boolean))];
-  for (const search of searchTerms) {
-    const { spots = [] } = await SpotService.getAllSpots({
-      page: 1,
-      limit: 5,
-      search,
-      sortBy: 'rating_avg',
-      sortOrder: 'DESC',
-    });
-    const candidate = spots.find(s => s.slug === normalizedSlug)
-      || spots.find(s => String(s.slug || '').includes(normalizedSlug))
-      || spots[0];
-    if (candidate?.id) {
-      return SpotService.getSpotById(candidate.id);
+  return cacheOrFetch(cacheKey, async () => {
+    if (id) return SpotService.getSpotById(id);
+
+    try {
+      return await SpotService.getSpotBySlug(normalizedSlug);
+    } catch (_) {
+      // The model often sends short slugs like "trang-an"; DB slugs can be longer.
     }
-  }
 
-  return null;
+    const searchTerms = [...new Set([normalizedSlug, slugToSearchText(normalizedSlug)].filter(Boolean))];
+    for (const search of searchTerms) {
+      const { spots = [] } = await SpotService.getAllSpots({
+        page: 1,
+        limit: 5,
+        search,
+        sortBy: 'rating_avg',
+        sortOrder: 'DESC',
+      });
+      const candidate = spots.find(s => s.slug === normalizedSlug)
+        || spots.find(s => String(s.slug || '').includes(normalizedSlug))
+        || spots[0];
+      if (candidate?.id) {
+        return SpotService.getSpotById(candidate.id);
+      }
+    }
+
+    return null;
+  }, SPOT_DETAIL_TTL);
 }
 
 function buildFallbackItinerary({ num_days, preferences = [], budget_vnd, start_location }, spots = []) {
@@ -227,7 +236,7 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'search_spots',
-      description: 'Tìm điểm du lịch ở Ninh Bình theo từ khoá, danh mục, hoặc gần một vị trí. Sau khi gọi tool này nên gọi navigate_map(fit_bounds) với map_hint.bounds để hiển thị tất cả lên bản đồ.',
+      description: 'Tìm điểm du lịch ở Ninh Bình. Mặc định sắp theo rating_avg DESC nên hợp cho câu "top điểm". Truyền is_featured=true cho "nổi bật", rating_min=4 cho "đẹp nhất". Có lat/lng+radius_km để tìm gần một toạ độ.',
       parameters: {
         type: 'object',
         properties: {
@@ -370,13 +379,26 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'get_route_between',
-      description: 'Tính khoảng cách đường thẳng giữa các điểm theo thứ tự. Dùng để vẽ route trên bản đồ. Coordinates dạng [[lng,lat],...].',
+      description: 'Tính khoảng cách đường thẳng giữa các điểm theo thứ tự. ƯU TIÊN truyền points=[{slug|id|name},...] (server tự tra DB lấy toạ độ thật, chính xác hơn) — chỉ truyền coordinates [[lng,lat],...] khi user đã cho sẵn toạ độ cụ thể, KHÔNG tự đoán toạ độ điểm du lịch.',
       parameters: {
         type: 'object',
-        required: ['coordinates'],
         properties: {
+          points: {
+            type: 'array',
+            description: 'Danh sách điểm theo thứ tự. Mỗi điểm: {slug} hoặc {id} hoặc {name}. Server resolve thành coords thật.',
+            items: {
+              type: 'object',
+              properties: {
+                slug: { type: 'string' },
+                id: { type: 'string' },
+                name: { type: 'string' },
+              },
+            },
+            minItems: 2,
+          },
           coordinates: {
             type: 'array',
+            description: '[[lng,lat],...] — chỉ dùng khi user cho sẵn toạ độ',
             items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 },
             minItems: 2,
           },
@@ -465,7 +487,7 @@ const HANDLERS = {
         province_code,
         rating_min,
         is_featured,
-        sortBy: rating_min ? 'rating_avg' : 'created_at',
+        sortBy: 'rating_avg',
         sortOrder: 'DESC',
       });
       rows = spots;
@@ -630,15 +652,57 @@ const HANDLERS = {
   },
 
   async get_route_between(args) {
-    const { coordinates, unit = 'km' } = args;
-    if (!Array.isArray(coordinates) || coordinates.length < 2) {
-      return { error: 'Cần ít nhất 2 toạ độ' };
+    const { points, coordinates: rawCoords, unit = 'km' } = args;
+
+    // Ưu tiên resolve theo points (slug/id/name) để tránh model tự đoán toạ độ.
+    let coordinates = Array.isArray(rawCoords) ? rawCoords.slice() : [];
+    const resolvedItems = [];
+
+    if (Array.isArray(points) && points.length >= 2) {
+      coordinates = [];
+      for (const p of points) {
+        if (!p) {
+          resolvedItems.push({ error: 'Điểm rỗng' });
+          continue;
+        }
+        const spot = await findSpotDetail({
+          id: p.id,
+          slug: p.slug || (p.name ? p.name.toLowerCase().trim().replace(/\s+/g, '-') : null),
+        });
+        if (!spot) {
+          resolvedItems.push({ query: p, error: 'Không tìm thấy điểm' });
+          continue;
+        }
+        const ll = pickLngLat(spot);
+        if (!ll) {
+          resolvedItems.push({ query: p, id: spot.id, name: spot.name_vi, error: 'Điểm thiếu toạ độ' });
+          continue;
+        }
+        coordinates.push(ll);
+        resolvedItems.push({
+          query: p,
+          id: spot.id,
+          slug: spot.slug,
+          name: spot.name_vi,
+          lng: ll[0],
+          lat: ll[1],
+        });
+      }
     }
+
+    if (!Array.isArray(coordinates) || coordinates.length < 2) {
+      return {
+        error: 'Cần ít nhất 2 điểm hợp lệ (points hoặc coordinates)',
+        resolved: resolvedItems.length ? resolvedItems : undefined,
+      };
+    }
+
     const distance = await MapMeasureService.measureDistance(coordinates, unit);
     const asRows = coordinates.map(([lng, lat]) => ({ lng, lat }));
     return {
       distance,
       coordinates,
+      resolved: resolvedItems.length ? resolvedItems : undefined,
       map_hint: {
         coordinates,
         bounds: computeBounds(asRows),

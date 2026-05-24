@@ -31,16 +31,13 @@ class UserController {
     return OK(res, "Cập nhật người dùng thành công", { user: updatedUser.toJSON() });
   });
 
-  static unlockUser = asyncHandler(async (req, res) => {
+  static toggleUserLock = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    await userService.unlockUserAccount(id);
-    return OK(res, "Mở khóa tài khoản thành công", {});
-  });
-
-  static lockUser = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    await userService.lockUserAccount(id);
-    return OK(res, "Khóa tài khoản thành công", {});
+    const updated = await userService.toggleUserLock(id);
+    const message = updated.is_active
+      ? "Mở khóa tài khoản thành công"
+      : "Khóa tài khoản thành công";
+    return OK(res, message, { is_active: updated.is_active });
   });
 
   static deleteUsersBatch = asyncHandler(async (req, res) => {

@@ -128,7 +128,13 @@
       "Bash(node -e \"require\\('./src/utils/i18n.utils'\\); require\\('./src/models/repositories/spot.repository'\\); require\\('./src/models/repositories/culinary.repository'\\); require\\('./src/models/repositories/festival.repository'\\); require\\('./src/models/repositories/ocop.repository'\\); require\\('./src/models/repositories/tour.repository'\\); require\\('./src/services/culinary.service'\\); require\\('./src/services/festival.service'\\); require\\('./src/services/ocop.service'\\); require\\('./src/services/tour.service'\\); require\\('./src/controllers/culinary.controller'\\); require\\('./src/controllers/festival.controller'\\); require\\('./src/controllers/ocop.controller'\\); require\\('./src/controllers/tour.controller'\\); console.log\\('All modules loaded successfully'\\);\")",
       "Bash(node scripts/generate-postman-collection.js)",
       "PowerShell(\\(Get-Content \"src\\\\models\\\\repositories\\\\spot.repository.js\"\\) | Where-Object { $_ -notmatch 'langFieldSQL' } | Set-Content \"src\\\\models\\\\repositories\\\\spot.repository.js\" -Encoding utf8)",
-      "Bash(node scripts/insert-mock-capacity.js)"
+      "Bash(node scripts/insert-mock-capacity.js)",
+      "Bash(rtk curl *)",
+      "Bash(python -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\('CONTENT:', d['data']['message']['content'][:1500]\\); print\\('TOOL_CALLS:', json.dumps\\(d['data']['message'].get\\('tool_calls', []\\), ensure_ascii=False\\)\\)\")",
+      "Bash(python -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\('CONTENT:', d['data']['message']['content'][:1000]\\); print\\('TOOL_CALLS:', json.dumps\\(d['data']['message'].get\\('tool_calls', []\\), ensure_ascii=False\\)\\); ma=d['data'].get\\('map_actions', []\\); print\\('MAP_ACTION_TYPES:', [a.get\\('action'\\) for a in ma]\\)\")",
+      "Bash(python -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\('CONTENT:', d['data']['message']['content'][:1000]\\); print\\('TOOL_CALLS:', json.dumps\\(d['data']['message'].get\\('tool_calls', []\\), ensure_ascii=False\\)\\)\")",
+      "Bash(python -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\('CONTENT:', d['data']['message']['content']\\); print\\('TOOL_CALLS:', json.dumps\\(d['data']['message'].get\\('tool_calls', []\\), ensure_ascii=False\\)\\)\")",
+      "Bash(python -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\('CONTENT:', d['data']['message']['content'][:800]\\); print\\('TOOL_CALLS:', json.dumps\\(d['data']['message'].get\\('tool_calls', []\\), ensure_ascii=False\\)\\)\")"
     ]
   }
 }

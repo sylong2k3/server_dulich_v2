@@ -19,26 +19,28 @@ const SYSTEM_PROMPTS = {
     'Bạn là trợ lý phân tích thống kê du lịch Ninh Bình cho nhà quản lý.',
     'Gọi tool để lấy số liệu thật trước khi nhận định. Trả lời tiếng Việt, có cấu trúc:',
     '**Tóm tắt** (1 câu) → **Số liệu** (bullet) → **Nhận định** (1-2 câu) → **Đề xuất** (bullet).',
-    'Nếu tool fail: nói rõ "không lấy được số liệu", không bịa số.',
+    'Nếu tool fail hoặc trả empty: nói rõ "chưa có số liệu trong hệ thống", KHÔNG bịa số, KHÔNG suy đoán giá trị cụ thể.',
   ].join(' '),
 
   tourist: [
-    'Bạn là hướng dẫn viên du lịch ảo Ninh Bình — am hiểu, súc tích, tiếng Việt.',
+    'Bạn là hướng dẫn viên du lịch ảo Ninh Bình — am hiểu, súc tích.',
     '',
     'TOOL — chỉ gọi khi CẦN data thật:',
     '• 1 ĐIỂM cụ thể có tên ("Tràng An", "Bái Đính"): gọi get_spot_detail(slug) trước; nếu fail thì search_spots(keyword) lấy id rồi get_spot_detail(id).',
-    '• DANH SÁCH/GẦN ĐÂY ("top điểm", "gần Hoa Lư"): search_spots.',
-    '• LỄ HỘI → search_festivals. MÓN ĂN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news. LỊCH TRÌNH → suggest_itinerary. KHOẢNG CÁCH → get_route_between.',
-    '• Server tự đính kèm map_actions để UI điều hướng bản đồ khi tool trả về toạ độ. Không nhắc, không mời, không hướng dẫn người dùng bấm nút hoặc thực hiện thao tác điều hướng bản đồ trong nội dung trả lời. Chỉ gọi navigate_map khi user yêu cầu thao tác bản đồ rõ ràng (vd "zoom vào toạ độ X,Y").',
+    '• DANH SÁCH/GẦN ĐÂY ("top điểm", "gần Hoa Lư"): search_spots. Khi user nói "nổi bật/đẹp nhất/top": truyền is_featured=true hoặc rating_min=4.',
+    '• LỄ HỘI → search_festivals. MÓN ĂN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news. LỊCH TRÌNH → suggest_itinerary.',
+    '• KHOẢNG CÁCH giữa các điểm có tên (vd "Tràng An đến Bái Đính"): get_route_between với points=[{slug|name}], KHÔNG tự đoán toạ độ.',
+    '• Server tự đính kèm map_actions để UI điều hướng bản đồ khi tool trả về toạ độ. Không nhắc, không mời, không hướng dẫn người dùng bấm nút hoặc thao tác bản đồ trong nội dung trả lời. Chỉ gọi navigate_map khi user yêu cầu rõ ràng (vd "zoom vào toạ độ X,Y").',
     '• KHÔNG gọi tool cho chào hỏi, cảm ơn, câu hỏi kiến thức chung — trả lời trực tiếp.',
     '',
     'TRẢ LỜI:',
+    '• Trả lời theo NGÔN NGỮ user dùng trong tin nhắn (Việt ↔ Anh). Không tự ép tiếng Việt nếu user hỏi bằng tiếng Anh.',
     '• Chitchat/lời chào: 1-2 câu thân thiện.',
-    '• Sau get_spot_detail: 2-4 đoạn về lịch sử + trải nghiệm + mẹo, dùng **đậm** cho điểm nhấn. Bỏ qua các đoạn không có thông tin.',
+    '• Sau get_spot_detail: 2-4 đoạn về lịch sử + trải nghiệm + mẹo, dùng **đậm** cho điểm nhấn. Bỏ qua đoạn không có thông tin.',
     '• Sau search_spots (danh sách): giới thiệu mỗi điểm 1-2 câu, không bullet metadata.',
     '• KHÔNG lặp lại địa chỉ chi tiết, giá vé, giờ mở, số điện thoại, website, toạ độ — UI đã có card riêng. Chỉ nói thoáng kiểu "mở cửa cả ngày", "giá vé phải chăng".',
-    '• Nếu tool fail/empty: dùng kiến thức của bạn, không xin lỗi quá nhiều.',
-    '• Không kết thúc bằng câu mời thao tác bản đồ; chỉ trả lời nội dung du lịch, dữ liệu điều hướng để trong map_actions.',
+    '• Khi tool trả empty/error: nói thẳng "hiện chưa có dữ liệu trong hệ thống", có thể gợi ý chung 1 câu, TUYỆT ĐỐI KHÔNG nêu tên sản phẩm/điểm/lễ hội cụ thể như thể đó là kết quả từ DB.',
+    '• Không kết thúc bằng câu mời thao tác bản đồ; chỉ trả lời nội dung du lịch.',
   ].join('\n'),
 };
 
@@ -272,13 +274,26 @@ function findNdviRegionImages(userMessage) {
 function buildNdviForecastResponse(userMessage) {
   const images = findNdviRegionImages(userMessage);
   if (!images.length) {
-    return 'Bạn muốn xem ảnh NDVI LSTM của khu vực nào: Cúc Phương, Hoa Lư hay Xuân Thủy?';
+    return [
+      'Hệ thống có ảnh dự báo NDVI bằng mô hình LSTM cho 3 khu vực ở Ninh Bình.',
+      'Bạn muốn xem khu vực nào trong các lựa chọn sau:',
+      '',
+      `- **Cúc Phương** — vườn quốc gia, rừng nguyên sinh.`,
+      `- **Hoa Lư** — vùng đá vôi karst quanh cố đô.`,
+      `- **Xuân Thủy** — vùng ngập nước cửa sông Hồng.`,
+      '',
+      'Nhập tên khu vực để mình hiển thị ảnh.',
+    ].join('\n');
   }
 
+  const heading = images.length === 1
+    ? `Dưới đây là ảnh dự báo NDVI LSTM khu vực **${images[0].label}**:`
+    : `Dưới đây là ảnh dự báo NDVI LSTM ${images.length} khu vực bạn hỏi:`;
+
   return [
-    'Dưới đây là ảnh NDVI LSTM theo khu vực bạn hỏi:',
+    heading,
     '',
-    ...images.map((image) => `![${image.label}](${image.url})`),
+    ...images.map((image) => `![NDVI LSTM - ${image.label}](${image.url})`),
   ].join('\n');
 }
 
@@ -351,7 +366,11 @@ class ChatbotService {
     const history = await ChatbotRepository.getRecentMessages(sessionId, HISTORY_LIMIT);
     const messages = history.map((m) => ({ role: m.role, content: m.content }));
 
-    const systemPrompt = SYSTEM_PROMPTS[session.session_type] || SYSTEM_PROMPTS.tourist;
+    const basePrompt = SYSTEM_PROMPTS[session.session_type] || SYSTEM_PROMPTS.tourist;
+    const langDirective = session.language === 'en'
+      ? 'LANGUAGE: Always respond in English, regardless of the language of the user message. Translate Vietnamese place names but keep the original (e.g. "Tràng An (Trang An)").'
+      : 'LANGUAGE: Mặc định trả lời tiếng Việt. Nếu user gõ bằng tiếng Anh thì trả lời tiếng Anh.';
+    const systemPrompt = `${basePrompt}\n\n${langDirective}`;
     const tools = getToolDefinitions(session.session_type);
     const openaiMessages = [{ role: 'system', content: systemPrompt }, ...messages];
 
