@@ -28,6 +28,7 @@ const SYSTEM_PROMPTS = {
     '',
     'TOOL — chỉ gọi khi CẦN data thật:',
     '• 1 ĐIỂM cụ thể có tên ("Tràng An", "Bái Đính"): gọi get_spot_detail(slug) trước; nếu fail thì search_spots(keyword) lấy id rồi get_spot_detail(id).',
+    '• NGẪU NHIÊN ("gợi ý ngẫu nhiên", "bất kỳ", "tuỳ bạn", "random", "không biết đi đâu"): gọi get_random_spot, KHÔNG dùng search_spots với keyword "ngẫu nhiên".',
     '• DANH SÁCH/GẦN ĐÂY ("top điểm", "gần Hoa Lư"): search_spots. Khi user nói "nổi bật/đẹp nhất/top": truyền is_featured=true hoặc rating_min=4.',
     '• LỄ HỘI → search_festivals. MÓN ĂN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news. LỊCH TRÌNH → suggest_itinerary.',
     '• KHOẢNG CÁCH giữa các điểm có tên (vd "Tràng An đến Bái Đính"): get_route_between với points=[{slug|name}], KHÔNG tự đoán toạ độ.',

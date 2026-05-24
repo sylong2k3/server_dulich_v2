@@ -270,6 +270,20 @@ const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'get_random_spot',
+      description: 'Lấy 1 điểm du lịch NGẪU NHIÊN. Gọi tool này (KHÔNG dùng search_spots) khi user nói "gợi ý ngẫu nhiên", "bất kỳ", "tuỳ bạn", "random", "không biết đi đâu". Mặc định ưu tiên điểm có rating ≥ 4.',
+      parameters: {
+        type: 'object',
+        properties: {
+          min_rating: { type: 'number', description: 'Rating tối thiểu (mặc định 4)', default: 4 },
+          featured_only: { type: 'boolean', description: 'Chỉ chọn trong điểm featured', default: false },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_spot_capacity',
       description: 'Kiểm tra sức chứa hiện tại / cảnh báo quá tải của một điểm du lịch.',
       parameters: {
@@ -510,6 +524,52 @@ const HANDLERS = {
     if (!id && !slug) return { error: 'Cần truyền id hoặc slug' };
     const spot = await findSpotDetail({ id, slug });
     if (!spot) return { error: 'Không tìm thấy điểm du lịch' };
+    const trimmed = trimSpot(spot);
+    return {
+      item: {
+        ...trimmed,
+        description_vi: firstValue(spot.description_vi, spot.description),
+        address_vi: firstValue(spot.address_vi, spot.address),
+        opening_hours: spot.opening_hours,
+        ticket_price_child: spot.ticket_price_child,
+        phone: spot.phone,
+        website: spot.website,
+        primary_image: spot.primary_image,
+      },
+      map_hint: trimmed.lat != null
+        ? { spot_ids: [trimmed.id], center: [trimmed.lng, trimmed.lat], suggested_action: 'pan_and_popup' }
+        : null,
+    };
+  },
+
+  async get_random_spot(args = {}) {
+    const minRating = Number.isFinite(Number(args.min_rating)) ? Number(args.min_rating) : 4;
+    const featuredOnly = !!args.featured_only;
+
+    // Lấy ngẫu nhiên 1 điểm. PostgreSQL ORDER BY RANDOM() OK với bảng cỡ vừa.
+    const conds = [`status = 'active'`, `rating_avg >= $1`];
+    const params = [minRating];
+    if (featuredOnly) conds.push('is_featured = true');
+
+    let { rows } = await pool.query(
+      `SELECT id FROM tourism_spots
+       WHERE ${conds.join(' AND ')}
+       ORDER BY RANDOM() LIMIT 1`,
+      params
+    );
+
+    // Fallback: nếu không có điểm nào đạt ngưỡng → nới rating
+    if (!rows[0] && minRating > 0) {
+      const fb = await pool.query(
+        `SELECT id FROM tourism_spots WHERE status='active' ORDER BY RANDOM() LIMIT 1`
+      );
+      rows = fb.rows;
+    }
+    if (!rows[0]) return { error: 'Không có điểm du lịch nào trong hệ thống' };
+
+    const spot = await SpotService.getSpotById(rows[0].id);
+    if (!spot) return { error: 'Không tìm thấy chi tiết điểm' };
+
     const trimmed = trimSpot(spot);
     return {
       item: {
@@ -810,7 +870,7 @@ function truncateText(text, max = 280) {
 
 function extractAttachableItems(toolName, result) {
   if (!result || result.error) return [];
-  const SPOT_TOOLS = new Set(['search_spots', 'get_spot_detail']);
+  const SPOT_TOOLS = new Set(['search_spots', 'get_spot_detail', 'get_random_spot']);
   const FESTIVAL_TOOLS = new Set(['search_festivals']);
 
   let type;
@@ -818,8 +878,8 @@ function extractAttachableItems(toolName, result) {
   else if (FESTIVAL_TOOLS.has(toolName)) type = 'festival';
   else return [];
 
-  // get_spot_detail trả result.item (full info), search_* trả result.items (summary)
-  const isDetail = toolName === 'get_spot_detail';
+  // get_spot_detail / get_random_spot trả result.item (full info), search_* trả result.items (summary)
+  const isDetail = toolName === 'get_spot_detail' || toolName === 'get_random_spot';
   const arr = Array.isArray(result.items)
     ? result.items
     : (result.item ? [result.item] : []);
