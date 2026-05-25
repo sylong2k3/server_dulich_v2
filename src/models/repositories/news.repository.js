@@ -120,9 +120,11 @@ class NewsRepository {
     const offset = (page - 1) * limit;
     const rootSql = `
       SELECT c.*, u.full_name AS author_full_name, u.avatar_url AS author_avatar,
+             r.name_vi AS role_name, r.code AS role_code,
              COUNT(*) OVER() AS total_count
       FROM news_comments c
       LEFT JOIN users u ON c.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
       WHERE c.news_id = $1 AND c.parent_comment_id IS NULL AND c.is_approved = true
       ORDER BY c.created_at ASC
       LIMIT $2 OFFSET $3
@@ -135,9 +137,11 @@ class NewsRepository {
     // Lấy replies cho các root comments đã load
     const rootIds = rootResult.rows.map(r => r.id);
     const replySql = `
-      SELECT c.*, u.full_name AS author_full_name, u.avatar_url AS author_avatar
+      SELECT c.*, u.full_name AS author_full_name, u.avatar_url AS author_avatar,
+             r.name_vi AS role_name, r.code AS role_code
       FROM news_comments c
       LEFT JOIN users u ON c.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
       WHERE c.news_id = $1 AND c.parent_comment_id = ANY($2::uuid[]) AND c.is_approved = true
       ORDER BY c.created_at ASC
     `;
@@ -158,11 +162,24 @@ class NewsRepository {
     return result.rows[0] || null;
   }
 
+  static async findCommentWithDetailsById(id) {
+    const sql = `
+      SELECT c.*, u.full_name AS author_full_name, u.avatar_url AS author_avatar,
+             r.name_vi AS role_name, r.code AS role_code
+      FROM news_comments c
+      LEFT JOIN users u ON c.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE c.id = $1
+    `;
+    const result = await db.query(sql, [id]);
+    return result.rows[0] || null;
+  }
+
   static async createComment({ news_id, user_id, parent_comment_id, content, user_name, user_email }) {
     const sql = `
       INSERT INTO news_comments (news_id, user_id, parent_comment_id, content, user_name, user_email, is_approved)
       VALUES ($1,$2,$3,$4,$5,$6,$7)
-      RETURNING *
+      RETURNING id
     `;
     // Tự động duyệt nếu là user đã đăng nhập
     const isApproved = !!user_id;
@@ -170,15 +187,17 @@ class NewsRepository {
       news_id, user_id || null, parent_comment_id || null,
       content, user_name || null, user_email || null, isApproved,
     ]);
-    return result.rows[0];
+    const newCommentId = result.rows[0]?.id;
+    return newCommentId ? this.findCommentWithDetailsById(newCommentId) : null;
   }
 
   static async updateComment(id, { content }) {
     const result = await db.query(
-      'UPDATE news_comments SET content = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      'UPDATE news_comments SET content = $1, updated_at = NOW() WHERE id = $2 RETURNING id',
       [content, id]
     );
-    return result.rows[0] || null;
+    const commentId = result.rows[0]?.id;
+    return commentId ? this.findCommentWithDetailsById(commentId) : null;
   }
 
   static async deleteComment(id) {
@@ -188,10 +207,11 @@ class NewsRepository {
 
   static async setCommentApproval(id, isApproved) {
     const result = await db.query(
-      'UPDATE news_comments SET is_approved = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      'UPDATE news_comments SET is_approved = $1, updated_at = NOW() WHERE id = $2 RETURNING id',
       [isApproved, id]
     );
-    return result.rows[0] || null;
+    const commentId = result.rows[0]?.id;
+    return commentId ? this.findCommentWithDetailsById(commentId) : null;
   }
 }
 
