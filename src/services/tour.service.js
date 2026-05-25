@@ -7,6 +7,11 @@ const { normalizeLang } = require('../utils/i18n.utils');
 
 const TOUR_CACHE_TTL = 60;
 
+// Các role được bypass ownership check (quản lý nội dung toàn hệ thống)
+const GLOBAL_ROLES = new Set(['system_admin', 'ministry_manager']);
+const DEPARTMENT_ROLES = new Set(['department_manager']);
+const OWNER_ROLES = new Set(['travel_company', 'service_provider']);
+
 class TourService {
     // ==================== TOUR PACKAGES ====================
 
@@ -43,12 +48,14 @@ class TourService {
     /**
      * Admin list — KHÔNG cache: admin cần thấy thay đổi ngay sau CRUD,
      * traffic thấp, filter mở rộng (status/business_id/province_code).
+     * Áp dụng RBAC scoping theo role của viewer.
      */
-    async getAdminAll(query = {}) {
+    async getAdminAll(query = {}, viewer = {}) {
         const page = Math.max(1, parseInt(query.page) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 20));
         const lang = normalizeLang(query.lang);
-        const { rows, total } = await TourRepository.findAll({ ...query, page, limit, lang });
+        const effectiveQuery = this._applyListScope({ ...query, page, limit, lang }, viewer?.user);
+        const { rows, total } = await TourRepository.findAll(effectiveQuery);
         const result = formatPagination(rows.map(({ total_count, ...r }) => r), total, page, limit);
         return { tours: result.data, pagination: result.pagination };
     }
@@ -64,11 +71,12 @@ class TourService {
         }, TOUR_CACHE_TTL);
     }
 
-    // Admin detail — KHÔNG cache, thấy mọi trạng thái.
-    async getAdminById(id, query = {}) {
+    // Admin detail — KHÔNG cache, thấy mọi trạng thái, nhưng scoped theo role.
+    async getAdminById(id, viewer = {}, query = {}) {
         const lang = normalizeLang(query.lang);
         const tour = await TourRepository.findById(id, lang);
         if (!tour) throw new Api404Error('Không tìm thấy tour');
+        this._assertCanView(tour, viewer?.user);
         return tour;
     }
 
@@ -242,6 +250,64 @@ class TourService {
         if (new Set(values).size !== values.length) {
             throw new Api400Error(message);
         }
+    }
+
+    // ==================== RBAC SCOPING ====================
+
+    _applyListScope(options = {}, user) {
+        const roleCode = this._roleCode(user);
+        const scoped = { ...options };
+
+        // system_admin / ministry_manager — thấy tất cả
+        if (GLOBAL_ROLES.has(roleCode)) return scoped;
+
+        // department_manager — chỉ thấy tour trong tỉnh mình quản lý
+        if (DEPARTMENT_ROLES.has(roleCode)) {
+            const provinceCode = this._resolveProvinceCode(user, scoped);
+            if (provinceCode) scoped.province_code = provinceCode;
+            return scoped;
+        }
+
+        // travel_company / service_provider — chỉ thấy tour của doanh nghiệp mình
+        if (OWNER_ROLES.has(roleCode)) {
+            scoped.business_id = user?.business_id;
+            return scoped;
+        }
+
+        // Fallback: chỉ thấy tour đã published
+        scoped.status = 'published';
+        return scoped;
+    }
+
+    _assertCanView(tour, user) {
+        const roleCode = this._roleCode(user);
+        if (GLOBAL_ROLES.has(roleCode)) return;
+        if (DEPARTMENT_ROLES.has(roleCode)) {
+            const provinceCode = this._resolveProvinceCode(user);
+            if (provinceCode && tour.province_code !== provinceCode) {
+                throw new Api403Error('Tour không thuộc tỉnh bạn quản lý');
+            }
+            return;
+        }
+        if (OWNER_ROLES.has(roleCode)) {
+            if (tour.business_id && tour.business_id !== user?.business_id) {
+                throw new Api403Error('Bạn không có quyền xem tour của doanh nghiệp khác');
+            }
+            return;
+        }
+    }
+
+    _roleCode(user) {
+        return String(user?.role?.code || '').trim().toLowerCase();
+    }
+
+    _resolveProvinceCode(user, options = {}) {
+        return user?.province_code
+            || user?.province?.code
+            || user?.department?.province_code
+            || user?.profile?.province_code
+            || options?.province_code
+            || null;
     }
 }
 

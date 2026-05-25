@@ -13,12 +13,12 @@ class TourController {
     // ==================== ADMIN — không cache ====================
 
     static getAdminAll = asyncHandler(async (req, res) => {
-        const result = await tourService.getAdminAll(req.query);
+        const result = await tourService.getAdminAll(req.query, { user: req.user });
         return OK(res, 'Danh sách tour (admin)', result);
     });
 
     static getAdminById = asyncHandler(async (req, res) => {
-        const tour = await tourService.getAdminById(req.params.id, req.query);
+        const tour = await tourService.getAdminById(req.params.id, { user: req.user }, req.query);
         return OK(res, 'Chi tiết tour (admin)', { tour });
     });
 

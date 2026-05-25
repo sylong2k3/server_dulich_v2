@@ -15,13 +15,13 @@ class OcopController {
   static getMy = asyncHandler(async (req, res) => OK(res, 'Sản phẩm OCOP của tôi', await OcopService.getMy(req.query, req.user)));
 
   // ==================== ADMIN — không cache ====================
-  static getAdminAll = asyncHandler(async (req, res) => OK(res, 'Danh sách sản phẩm OCOP (admin)', await OcopService.getAdminAll(req.query)));
-  static getAdminById = asyncHandler(async (req, res) => OK(res, 'Chi tiết sản phẩm OCOP (admin)', await OcopService.getAdminById(req.params.id, req.query)));
+  static getAdminAll = asyncHandler(async (req, res) => OK(res, 'Danh sách sản phẩm OCOP (admin)', await OcopService.getAdminAll(req.query, { user: req.user })));
+  static getAdminById = asyncHandler(async (req, res) => OK(res, 'Chi tiết sản phẩm OCOP (admin)', await OcopService.getAdminById(req.params.id, { user: req.user }, req.query)));
 
   // ==================== MUTATIONS ====================
-  static create = asyncHandler(async (req, res) => CREATED(res, 'Thêm sản phẩm OCOP thành công', await OcopService.create(req.body)));
-  static update = asyncHandler(async (req, res) => OK(res, 'Cập nhật sản phẩm OCOP thành công', await OcopService.update(req.params.id, req.body)));
-  static delete = asyncHandler(async (req, res) => { await OcopService.delete(req.params.id); return OK(res, 'Xóa sản phẩm OCOP thành công'); });
+  static create = asyncHandler(async (req, res) => CREATED(res, 'Thêm sản phẩm OCOP thành công', await OcopService.create(req.body, req.user)));
+  static update = asyncHandler(async (req, res) => OK(res, 'Cập nhật sản phẩm OCOP thành công', await OcopService.update(req.params.id, req.body, req.user)));
+  static delete = asyncHandler(async (req, res) => { await OcopService.delete(req.params.id, req.user); return OK(res, 'Xóa sản phẩm OCOP thành công'); });
 }
 
 module.exports = OcopController;
