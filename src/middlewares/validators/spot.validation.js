@@ -108,6 +108,8 @@ const audioGuideQuerySchema = Joi.object({
 
 const spotDetailQuerySchema = Joi.object({
     lang: Joi.string().valid('vi', 'en').default('vi'),
+    ocop: Joi.boolean().optional(),
+    radius_km: Joi.number().min(0.1).max(100).optional(),
 });
 
 // ── Body schemas (shared base fields) ─────────────────────────────────────────

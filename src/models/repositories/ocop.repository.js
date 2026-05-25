@@ -166,24 +166,23 @@ class OcopRepository {
         return result.rows.map(r => r.category);
     }
 
-    static async getOcopGeoJSON({ page = 1, limit = 50 } = {}) {
+    static async getOcopGeoJSON({ page = 1, limit = 50, lang: rawLang = 'vi' } = {}) {
+        const lang = normalizeLang(rawLang);
         const offset = (Math.max(1, Number(page)) - 1) * Math.min(100, Math.max(1, Number(limit)));
         const safeLimit = Math.min(100, Math.max(1, Number(limit)));
         const sql = `
           SELECT 
             o.id, 
+            ${localizedSQL(lang, 'o.name_vi', 'o.name_en', 'name')},
             o.name_vi, 
             o.star_rating, 
             o.cover_image_url,
             o.producer_name,
             o.price_vnd,
-            ts.id AS spot_id,
-            ts.name_vi AS spot_name,
-            ST_AsGeoJSON(ts.geom)::json AS geometry,
+            ST_AsGeoJSON(o.geom)::json AS geometry,
             COUNT(*) OVER() AS total_count
           FROM ocop_products o
-          INNER JOIN tourism_spots ts ON o.spot_id = ts.id
-          WHERE o.is_active = true AND ts.status = 'active' AND ts.geom IS NOT NULL
+          WHERE o.is_active = true AND o.geom IS NOT NULL
           ORDER BY o.name_vi
           LIMIT $1 OFFSET $2
         `;

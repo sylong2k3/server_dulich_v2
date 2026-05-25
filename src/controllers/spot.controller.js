@@ -46,12 +46,12 @@ class SpotController {
   });
 
   static getSpotById = asyncHandler(async (req, res) => {
-    const spot = await spotService.getSpotById(req.params.id, { user: req.user }, { lang: req.query.lang });
+    const spot = await spotService.getSpotById(req.params.id, { user: req.user }, req.query);
     return OK(res, 'Lấy thông tin điểm du lịch thành công', { spot });
   });
 
   static getSpotBySlug = asyncHandler(async (req, res) => {
-    const spot = await spotService.getSpotBySlug(req.params.slug, { user: req.user }, { lang: req.query.lang });
+    const spot = await spotService.getSpotBySlug(req.params.slug, { user: req.user }, req.query);
     return OK(res, 'Lấy thông tin điểm du lịch thành công', { spot });
   });
 

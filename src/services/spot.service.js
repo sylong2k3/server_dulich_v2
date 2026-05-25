@@ -150,10 +150,25 @@ class SpotService {
    */
   async getSpotBySlug(slug, viewer = {}, options = {}) {
     const lang = options.lang || 'vi';
-    return cacheOrFetch(`spot:slug:${slug}:${lang}:${this._canManage(viewer?.user) ? 'manage' : 'public'}`, async () => {
+    const isOcopRequested = options.ocop === 'true' || options.ocop === true;
+    const cacheKey = `spot:slug:${slug}:${lang}:${this._canManage(viewer?.user) ? 'manage' : 'public'}:${isOcopRequested ? `ocop:${options.radius_km || 10}` : 'no_ocop'}`;
+    return cacheOrFetch(cacheKey, async () => {
       const spot = await SpotRepository.findBySlug(slug, lang);
       if (!spot || (spot.status !== 'active' && !this._canManage(viewer?.user))) {
         throw new Api404Error('Spot not found');
+      }
+      if (isOcopRequested) {
+        const OcopRepository = require('../models/repositories/ocop.repository');
+        const radius = parseFloat(options.radius_km) || 10;
+        const { rows } = await OcopRepository.findAll({
+          spot_id: spot.id,
+          by_distance: true,
+          radius_km: radius,
+          lang,
+          is_active: true,
+          limit: 50
+        });
+        spot.ocop_products = rows.map(({ total_count, ...item }) => item);
       }
       return spot;
     }, 60);
@@ -161,9 +176,24 @@ class SpotService {
 
   async getSpotById(id, viewer = {}, options = {}) {
     const lang = normalizeLang(options.lang);
-    return cacheOrFetch(`spot:id:${id}:${lang}:${this._canManage(viewer?.user) ? 'manage' : 'public'}`, async () => {
+    const isOcopRequested = options.ocop === 'true' || options.ocop === true;
+    const cacheKey = `spot:id:${id}:${lang}:${this._canManage(viewer?.user) ? 'manage' : 'public'}:${isOcopRequested ? `ocop:${options.radius_km || 10}` : 'no_ocop'}`;
+    return cacheOrFetch(cacheKey, async () => {
       const spot = await SpotRepository.findById(id, lang);
       if (!spot || (spot.status !== 'active' && !this._canManage(viewer?.user))) throw new Api404Error('Điểm du lịch không tồn tại');
+      if (isOcopRequested) {
+        const OcopRepository = require('../models/repositories/ocop.repository');
+        const radius = parseFloat(options.radius_km) || 10;
+        const { rows } = await OcopRepository.findAll({
+          spot_id: spot.id,
+          by_distance: true,
+          radius_km: radius,
+          lang,
+          is_active: true,
+          limit: 50
+        });
+        spot.ocop_products = rows.map(({ total_count, ...item }) => item);
+      }
       return spot;
     }, 60);
   }
