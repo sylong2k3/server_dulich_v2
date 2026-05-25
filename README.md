@@ -161,6 +161,29 @@
 | GET | `/configs` | Cấu hình cảnh báo | `capacity:read` |
 | POST | `/configs` | Tạo/cập nhật cấu hình | `capacity:create` |
 
+### 💡 Hướng dẫn Cấu hình Sức chứa & Cảnh báo
+
+#### 1. Phân biệt hai chỉ số Phần trăm (`capacity_pct` vs `alert_threshold_pct`):
+* **`capacity_pct` (Tỷ lệ tải trọng THỰC TẾ - Hệ thống Tự tính)**:
+  * Phản ánh **thực tế** lượng du khách đang có mặt tại địa điểm so với sức chứa tối đa.
+  * Tự động tính toán khi ghi nhận lượng khách: `capacity_pct = (visitor_count / max_capacity) * 100`.
+  * Biến động liên tục theo thời gian thực (từ 0% đến 100%+).
+* **`alert_threshold_pct` (Ngưỡng cảnh báo GIỚI HẠN - Bạn Tự cài đặt)**:
+  * Là **vạch định mức an toàn** do người quản trị tự thiết lập thủ công cho điểm du lịch (ví dụ: `50%` hoặc `80%`).
+  * Có giá trị cố định. Khi tỷ lệ thực tế `capacity_pct` vượt quá ngưỡng `alert_threshold_pct` này, hệ thống sẽ tự động đổi màu cảnh báo nổi bật trên bản đồ và AI sẽ hạn chế gợi ý điểm này vào lịch trình tour để giảm tải.
+
+#### 2. Phân biệt 2 loại API Cấu hình Sức chứa:
+* **Cấu hình Sức chứa Cơ bản (`PATCH /spots/:spotId/settings`)**:
+  * Lưu trữ trực tiếp trong bảng `tourism_spots`.
+  * Dùng để thiết lập:
+    * `max_capacity`: Sức chứa tối đa của điểm du lịch (phục vụ làm mẫu số tính tải trọng).
+    * `alert_threshold_pct`: Ngưỡng cảnh báo an toàn cơ bản/hiển thị bản đồ/lọc AI.
+* **Cấu hình Cảnh báo Nâng cao (`POST /configs`)**:
+  * Lưu trữ trong bảng `capacity_alert_configs`.
+  * Dùng để thiết lập các ngưỡng chi tiết và cấu hình thông báo:
+    * `threshold_busy` / `threshold_near` / `threshold_over`: Các mức % tải trọng tương ứng với trạng thái Đông đúc, Sắp đầy và Quá tải.
+    * `notify_roles` (Mảng ID): Danh sách các ID vai trò (Roles) trong hệ thống sẽ nhận tin nhắn đẩy (Push, Websocket, SSE) trực tiếp khi lượng khách thực tế vượt ngưỡng để kịp thời xử lý.
+
 ---
 
 ## 🏢 Businesses (Doanh nghiệp) — `/api/v1/businesses`
@@ -379,6 +402,25 @@
 |---|---|---|---|
 | POST | `/message` | Gửi tin nhắn chatbot | Optional |
 | GET | `/history` | Lịch sử chat | Required |
+
+### 📡 Chatbot AI Map Actions (`map_actions`) dành cho Frontend Design
+
+Khi gửi tin nhắn đến Chatbot qua API `POST /message`, phản hồi trả về ngoài nội dung văn bản (`content`) còn có thể chứa mảng **`map_actions`**. Frontend sẽ tự động nhận diện các action này để điều phối, vẽ bản đồ và tương tác trực quan trên bản đồ Mapbox/OpenStreetMap của Client.
+
+Các Action được thiết kế và hỗ trợ bao gồm:
+
+| Action | Tham số mẫu (`payload`) | Ý nghĩa & Mô tả |
+| :--- | :--- | :--- |
+| **`fly_to`** | `{ "center": [lng, lat], "zoom": 15, "label": "Tràng An" }` | Bay camera đến vị trí tọa độ chỉ định (có hiệu ứng chuyển động mượt mà). |
+| **`pan`** | `{ "center": [lng, lat] }` | Di chuyển tâm bản đồ đến tọa độ mà không thay đổi độ phóng to (zoom). |
+| **`zoom`** | `{ "zoom": 14 }` | Thiết lập độ phóng to mong muốn của bản đồ (từ 1 đến 20). |
+| **`highlight`** | `{ "spot_ids": ["uuid1", "uuid2"] }` | Làm nổi bật/tô sáng các điểm du lịch chỉ định trên bản đồ. |
+| **`add_marker`** | `{ "center": [lng, lat], "label": "Điểm dừng chân", "color": "#FF0000" }` | Vẽ ghim (marker) mới lên bản đồ kèm nhãn và màu sắc tùy chỉnh. |
+| **`fit_bounds`** | `{ "bounds": [[minLng, minLat], [maxLng, maxLat]], "padding": 50 }` | Tự động căn chỉnh và co dãn bản đồ để hiển thị trọn vẹn danh sách các địa điểm trong khung nhìn. |
+| **`draw_route`** | `{ "coordinates": [[lng1, lat1], [lng2, lat2], ...], "color": "#0000FF", "label": "Tuyến đường gợi ý" }` | Vẽ tuyến đường đi nối giữa danh sách các điểm tọa độ chỉ định trên bản đồ. |
+| **`clear_markers`** | `{ "scope": "ai" }` | Xóa các marker trên bản đồ. `scope: "ai"` để chỉ xóa các ghim do chatbot AI thêm, hoặc `"all"` để xóa toàn bộ. |
+| **`show_popup`** | `{ "spot_id": "uuid", "center": [lng, lat], "html": "<b>Tràng An</b>" }` | Hiển thị bong bóng thông tin (popup) tại tọa độ cụ thể. |
+| **`filter_layer`** | `{ "layers": ["festival", "ocop"], "visible": true }` | Bật/tắt các lớp dữ liệu bản đồ chỉ định (ví dụ: lớp lễ hội, sản phẩm OCOP). |
 
 ---
 

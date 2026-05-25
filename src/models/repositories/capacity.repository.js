@@ -11,6 +11,7 @@ class CapacityRepository {
         cl.status,
         cl.recorded_at,
         ts.max_capacity,
+        ts.alert_threshold_pct,
         ST_AsGeoJSON(ts.geom)::jsonb AS geojson
       FROM tourism_spots ts
       LEFT JOIN LATERAL (
@@ -57,6 +58,7 @@ class CapacityRepository {
               'capacity_pct', vc.capacity_pct,
               'status', vc.status,
               'max_capacity', vc.max_capacity,
+              'alert_threshold_pct', vc.alert_threshold_pct,
               'recorded_at', vc.recorded_at
             )
           )
@@ -70,9 +72,6 @@ class CapacityRepository {
     return rows[0]?.geojson || { type: 'FeatureCollection', features: [] };
   }
 
-  /**
-   * Tải trọng hiện tại của 1 spot
-   */
   static async getCurrentBySpot(spotId) {
     const sql = `
       ${this._currentCapacityBaseSql()}
@@ -251,24 +250,67 @@ class CapacityRepository {
    * Tạo/cập nhật cấu hình cảnh báo
    */
   static async upsertAlertConfig(data) {
-    const sql = `
-      INSERT INTO capacity_alert_configs (spot_id, province_code, threshold_busy, threshold_near, threshold_over, notify_roles, updated_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (id) DO UPDATE SET
-        threshold_busy = EXCLUDED.threshold_busy,
-        threshold_near = EXCLUDED.threshold_near,
-        threshold_over = EXCLUDED.threshold_over,
-        notify_roles = EXCLUDED.notify_roles,
-        updated_by = EXCLUDED.updated_by,
-        updated_at = NOW()
-      RETURNING *
-    `;
-    const { rows } = await query(sql, [
-      data.spot_id, data.province_code,
-      data.threshold_busy || 70, data.threshold_near || 85, data.threshold_over || 100,
-      data.notify_roles || null, data.updated_by,
-    ]);
-    return rows[0];
+    let existingConfig = null;
+    if (data.spot_id) {
+      const { rows } = await query(
+        'SELECT id FROM capacity_alert_configs WHERE spot_id = $1 LIMIT 1',
+        [data.spot_id]
+      );
+      if (rows.length > 0) {
+        existingConfig = rows[0];
+      }
+    } else if (data.province_code) {
+      const { rows } = await query(
+        'SELECT id FROM capacity_alert_configs WHERE province_code = $1 AND spot_id IS NULL LIMIT 1',
+        [data.province_code]
+      );
+      if (rows.length > 0) {
+        existingConfig = rows[0];
+      }
+    }
+
+    if (existingConfig) {
+      const sql = `
+        UPDATE capacity_alert_configs
+        SET
+          threshold_busy = $1,
+          threshold_near = $2,
+          threshold_over = $3,
+          notify_roles = $4,
+          is_active = $5,
+          updated_by = $6,
+          updated_at = NOW()
+        WHERE id = $7
+        RETURNING *
+      `;
+      const { rows } = await query(sql, [
+        data.threshold_busy ?? 70,
+        data.threshold_near ?? 85,
+        data.threshold_over ?? 100,
+        data.notify_roles || null,
+        data.is_active ?? true,
+        data.updated_by,
+        existingConfig.id,
+      ]);
+      return rows[0];
+    } else {
+      const sql = `
+        INSERT INTO capacity_alert_configs (spot_id, province_code, threshold_busy, threshold_near, threshold_over, notify_roles, updated_by, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *
+      `;
+      const { rows } = await query(sql, [
+        data.spot_id || null,
+        data.province_code || null,
+        data.threshold_busy ?? 70,
+        data.threshold_near ?? 85,
+        data.threshold_over ?? 100,
+        data.notify_roles || null,
+        data.updated_by,
+        data.is_active ?? true,
+      ]);
+      return rows[0];
+    }
   }
 }
 

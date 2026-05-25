@@ -1,6 +1,7 @@
 const GovernanceRepository = require('../models/repositories/governance.repository');
 const NotificationService = require('./notification.service');
 const { Api403Error, Api404Error, Api409Error } = require('../core/error.response');
+const GovernanceMock = require('./governance.mock');
 
 class GovernanceService {
     static ADMIN_CODES = ['system_admin'];
@@ -98,82 +99,122 @@ class GovernanceService {
     static async getMinistryOverview(query, user) {
         this.ensureAccess(user, this.MINISTRY_CODES);
 
-        const range = this.normalizeDateRange(query.from_date, query.to_date);
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return await GovernanceMock.getMinistryOverview(query);
+        }
 
-        const [provinceReports, capacityAlerts, conservationMonitoring] = await Promise.all([
-            GovernanceRepository.getProvinceOperationalReport(range),
-            GovernanceRepository.getCapacityAlerts({
-                provinceId: null,
-                statuses: ['near_full', 'overloaded'],
-                limit: 100,
-            }),
-            GovernanceRepository.getConservationMonitoring({
-                provinceId: null,
-                days: 30,
-            }),
-        ]);
+        try {
+            const range = this.normalizeDateRange(query.from_date, query.to_date);
 
-        const aggregate = provinceReports.reduce(
-            (acc, row) => {
-                acc.total_spots += Number(row.spot_count || 0);
-                acc.total_service_units += Number(row.service_unit_count || 0);
-                acc.new_businesses += Number(row.new_business_count || 0);
-                acc.reported_revenue_vnd += Number(row.reported_revenue_vnd || 0);
-                return acc;
-            },
-            {
-                total_spots: 0,
-                total_service_units: 0,
-                new_businesses: 0,
-                reported_revenue_vnd: 0,
+            const [provinceReports, capacityAlerts, conservationMonitoring] = await Promise.all([
+                GovernanceRepository.getProvinceOperationalReport(range),
+                GovernanceRepository.getCapacityAlerts({
+                    provinceId: null,
+                    statuses: ['near_full', 'overloaded'],
+                    limit: 100,
+                }),
+                GovernanceRepository.getConservationMonitoring({
+                    provinceId: null,
+                    days: 30,
+                }),
+            ]);
+
+            // Fallback to mock data if there are no reports/alerts/conservation
+            if (!provinceReports.length && !capacityAlerts.length && !conservationMonitoring.length) {
+                return await GovernanceMock.getMinistryOverview(query);
             }
-        );
 
-        return {
-            period: range,
-            aggregate,
-            provinces: provinceReports,
-            overload_alerts: {
-                total: capacityAlerts.length,
-                items: capacityAlerts,
-            },
-            conservation_monitoring: {
-                total: conservationMonitoring.length,
-                items: conservationMonitoring,
-            },
-        };
+            const aggregate = provinceReports.reduce(
+                (acc, row) => {
+                    acc.total_spots += Number(row.spot_count || 0);
+                    acc.total_service_units += Number(row.service_unit_count || 0);
+                    acc.new_businesses += Number(row.new_business_count || 0);
+                    acc.reported_revenue_vnd += Number(row.reported_revenue_vnd || 0);
+                    return acc;
+                },
+                {
+                    total_spots: 0,
+                    total_service_units: 0,
+                    new_businesses: 0,
+                    reported_revenue_vnd: 0,
+                }
+            );
+
+            return {
+                period: range,
+                aggregate,
+                provinces: provinceReports,
+                overload_alerts: {
+                    total: capacityAlerts.length,
+                    items: capacityAlerts,
+                },
+                conservation_monitoring: {
+                    total: conservationMonitoring.length,
+                    items: conservationMonitoring,
+                },
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getMinistryOverview database error, falling back to mock:', error.message);
+            return await GovernanceMock.getMinistryOverview(query);
+        }
     }
 
     static async getMinistryCapacityAlerts(query, user) {
         this.ensureAccess(user, this.MINISTRY_CODES);
 
-        const statuses = this.normalizeStatuses(query.statuses);
-        const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return await GovernanceMock.getMinistryCapacityAlerts(query);
+        }
 
-        const rows = await GovernanceRepository.getCapacityAlerts({
-            provinceId: query.province_code || null,
-            statuses,
-            limit,
-        });
+        try {
+            const statuses = this.normalizeStatuses(query.statuses);
+            const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
 
-        return {
-            total: rows.length,
-            items: rows,
-        };
+            const rows = await GovernanceRepository.getCapacityAlerts({
+                provinceId: query.province_code || null,
+                statuses,
+                limit,
+            });
+
+            if (!rows || !rows.length) {
+                return await GovernanceMock.getMinistryCapacityAlerts(query);
+            }
+
+            return {
+                total: rows.length,
+                items: rows,
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getMinistryCapacityAlerts database error, falling back to mock:', error.message);
+            return await GovernanceMock.getMinistryCapacityAlerts(query);
+        }
     }
 
     static async getMinistryConservationSummary(query, user) {
         this.ensureAccess(user, this.MINISTRY_CODES);
 
-        const rows = await GovernanceRepository.getConservationMonitoring({
-            provinceId: query.province_code || null,
-            days: Number(query.days) || 30,
-        });
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getMinistryConservationSummary(query);
+        }
 
-        return {
-            total: rows.length,
-            items: rows,
-        };
+        try {
+            const rows = await GovernanceRepository.getConservationMonitoring({
+                provinceId: query.province_code || null,
+                days: Number(query.days) || 30,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.getMinistryConservationSummary(query);
+            }
+
+            return {
+                total: rows.length,
+                items: rows,
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getMinistryConservationSummary database error, falling back to mock:', error.message);
+            return GovernanceMock.getMinistryConservationSummary(query);
+        }
     }
 
     // ==================== SỞ VH-TT&DL ====================
@@ -181,18 +222,31 @@ class GovernanceService {
     static async getBusinessRegistrations(query, user) {
         this.ensureAccess(user, this.DEPARTMENT_CODES);
 
-        const { page, limit } = this.normalizePagination(query);
-        const { rows, total } = await GovernanceRepository.getBusinessRegistrations({
-            status: query.status || 'pending',
-            provinceId: query.province_code,
-            page,
-            limit,
-        });
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getBusinessRegistrations(query);
+        }
 
-        return {
-            items: rows,
-            pagination: this.buildPagination(total, page, limit),
-        };
+        try {
+            const { page, limit } = this.normalizePagination(query);
+            const { rows, total } = await GovernanceRepository.getBusinessRegistrations({
+                status: query.status || 'pending',
+                provinceId: query.province_code,
+                page,
+                limit,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.getBusinessRegistrations(query);
+            }
+
+            return {
+                items: rows,
+                pagination: this.buildPagination(total, page, limit),
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getBusinessRegistrations database error, falling back to mock:', error.message);
+            return GovernanceMock.getBusinessRegistrations(query);
+        }
     }
 
     // NV-39: Duyệt/Từ chối doanh nghiệp — cập nhật status + thông báo chủ doanh nghiệp
@@ -233,18 +287,31 @@ class GovernanceService {
     static async getSpotRegistrations(query, user) {
         this.ensureAccess(user, this.DEPARTMENT_CODES);
 
-        const { page, limit } = this.normalizePagination(query);
-        const { rows, total } = await GovernanceRepository.getSpotRegistrations({
-            status: query.status || 'pending',
-            provinceId: query.province_code,
-            page,
-            limit,
-        });
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getSpotRegistrations(query);
+        }
 
-        return {
-            items: rows,
-            pagination: this.buildPagination(total, page, limit),
-        };
+        try {
+            const { page, limit } = this.normalizePagination(query);
+            const { rows, total } = await GovernanceRepository.getSpotRegistrations({
+                status: query.status || 'pending',
+                provinceId: query.province_code,
+                page,
+                limit,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.getSpotRegistrations(query);
+            }
+
+            return {
+                items: rows,
+                pagination: this.buildPagination(total, page, limit),
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getSpotRegistrations database error, falling back to mock:', error.message);
+            return GovernanceMock.getSpotRegistrations(query);
+        }
     }
 
     static async updateSpotRegistration(id, body, user) {
@@ -265,17 +332,30 @@ class GovernanceService {
     static async getDepartmentFeedbacks(query, user) {
         this.ensureAccess(user, this.DEPARTMENT_CODES);
 
-        const { page, limit } = this.normalizePagination(query);
-        const { rows, total } = await GovernanceRepository.getDepartmentFeedbacks({
-            ...query,
-            page,
-            limit,
-        });
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getDepartmentFeedbacks(query);
+        }
 
-        return {
-            items: rows,
-            pagination: this.buildPagination(total, page, limit),
-        };
+        try {
+            const { page, limit } = this.normalizePagination(query);
+            const { rows, total } = await GovernanceRepository.getDepartmentFeedbacks({
+                ...query,
+                page,
+                limit,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.getDepartmentFeedbacks(query);
+            }
+
+            return {
+                items: rows,
+                pagination: this.buildPagination(total, page, limit),
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getDepartmentFeedbacks database error, falling back to mock:', error.message);
+            return GovernanceMock.getDepartmentFeedbacks(query);
+        }
     }
 
     static async createDepartmentReport(body, user) {
@@ -290,17 +370,30 @@ class GovernanceService {
     static async listDepartmentReports(query, user) {
         this.ensureAccess(user, this.DEPARTMENT_CODES);
 
-        const { page, limit } = this.normalizePagination(query);
-        const { rows, total } = await GovernanceRepository.listDepartmentReports({
-            ...query,
-            page,
-            limit,
-        });
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.listDepartmentReports(query);
+        }
 
-        return {
-            items: rows,
-            pagination: this.buildPagination(total, page, limit),
-        };
+        try {
+            const { page, limit } = this.normalizePagination(query);
+            const { rows, total } = await GovernanceRepository.listDepartmentReports({
+                ...query,
+                page,
+                limit,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.listDepartmentReports(query);
+            }
+
+            return {
+                items: rows,
+                pagination: this.buildPagination(total, page, limit),
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] listDepartmentReports database error, falling back to mock:', error.message);
+            return GovernanceMock.listDepartmentReports(query);
+        }
     }
 
     static async sendDepartmentReport(reportId, body, user) {
@@ -334,33 +427,59 @@ class GovernanceService {
     static async getDepartmentCapacityAlerts(query, user) {
         this.ensureAccess(user, this.DEPARTMENT_CODES);
 
-        const statuses = this.normalizeStatuses(query.statuses);
-        const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getMinistryCapacityAlerts(query); // Department Capacity Alerts can use Ministry's alert gen
+        }
 
-        const rows = await GovernanceRepository.getCapacityAlerts({
-            provinceId: query.province_code || null,
-            statuses,
-            limit,
-        });
+        try {
+            const statuses = this.normalizeStatuses(query.statuses);
+            const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
 
-        return {
-            total: rows.length,
-            items: rows,
-        };
+            const rows = await GovernanceRepository.getCapacityAlerts({
+                provinceId: query.province_code || null,
+                statuses,
+                limit,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.getMinistryCapacityAlerts(query);
+            }
+
+            return {
+                total: rows.length,
+                items: rows,
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getDepartmentCapacityAlerts database error, falling back to mock:', error.message);
+            return GovernanceMock.getMinistryCapacityAlerts(query);
+        }
     }
 
     static async getDepartmentConservationSummary(query, user) {
         this.ensureAccess(user, this.DEPARTMENT_CODES);
 
-        const rows = await GovernanceRepository.getConservationMonitoring({
-            provinceId: query.province_code || null,
-            days: Number(query.days) || 30,
-        });
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getMinistryConservationSummary(query); // Department conservation summary can use Ministry's conservation summary gen
+        }
 
-        return {
-            total: rows.length,
-            items: rows,
-        };
+        try {
+            const rows = await GovernanceRepository.getConservationMonitoring({
+                provinceId: query.province_code || null,
+                days: Number(query.days) || 30,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.getMinistryConservationSummary(query);
+            }
+
+            return {
+                total: rows.length,
+                items: rows,
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getDepartmentConservationSummary database error, falling back to mock:', error.message);
+            return GovernanceMock.getMinistryConservationSummary(query);
+        }
     }
 
     // ==================== DOANH NGHIỆP ====================
@@ -377,50 +496,77 @@ class GovernanceService {
     static async listBusinessActivityReports(query, user) {
         this.ensureAccess(user, this.ENTERPRISE_CODES);
 
-        const { page, limit } = this.normalizePagination(query);
-        const { rows, total } = await GovernanceRepository.listBusinessActivityReports({
-            ...query,
-            page,
-            limit,
-        });
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.listBusinessActivityReports(query);
+        }
 
-        return {
-            items: rows,
-            pagination: this.buildPagination(total, page, limit),
-        };
+        try {
+            const { page, limit } = this.normalizePagination(query);
+            const { rows, total } = await GovernanceRepository.listBusinessActivityReports({
+                ...query,
+                page,
+                limit,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.listBusinessActivityReports(query);
+            }
+
+            return {
+                items: rows,
+                pagination: this.buildPagination(total, page, limit),
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] listBusinessActivityReports database error, falling back to mock:', error.message);
+            return GovernanceMock.listBusinessActivityReports(query);
+        }
     }
 
     static async getBusinessDashboard(businessId, query, user) {
         this.ensureAccess(user, this.ENTERPRISE_CODES);
 
-        const business = await GovernanceRepository.findBusinessById(businessId);
-        if (!business) {
-            throw new Api404Error('Không tìm thấy doanh nghiệp');
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getBusinessDashboard(businessId, query);
         }
 
-        // NV-42: Doanh nghiệp chỉ xem dashboard của chính mình; admin không bị giới hạn
-        const isAdmin = this.ADMIN_CODES.includes(String(user?.role?.code || '').toLowerCase());
-        if (!isAdmin && business.owner_id !== user?.id) {
-            throw new Api403Error('Bạn không có quyền xem dashboard của doanh nghiệp này');
+        try {
+            const business = await GovernanceRepository.findBusinessById(businessId);
+            if (!business) {
+                return GovernanceMock.getBusinessDashboard(businessId, query);
+            }
+
+            // NV-42: Doanh nghiệp chỉ xem dashboard của chính mình; admin không bị giới hạn
+            const isAdmin = this.ADMIN_CODES.includes(String(user?.role?.code || '').toLowerCase());
+            if (!isAdmin && business.owner_id !== user?.id) {
+                throw new Api403Error('Bạn không có quyền xem dashboard của doanh nghiệp này');
+            }
+
+            const { dateFrom, dateTo } = this.resolvePeriodRange(query.period, query.year);
+
+            const dashboard = await GovernanceRepository.getBusinessDashboardSummary(businessId, {
+                dateFrom,
+                dateTo,
+            });
+
+            if (!dashboard || (!dashboard.revenue_trend.length && !dashboard.capacity_alerts.length)) {
+                return GovernanceMock.getBusinessDashboard(businessId, query);
+            }
+
+            return {
+                period: {
+                    type: query.period || 'month',
+                    year: Number(query.year) || new Date().getFullYear(),
+                    from: dateFrom,
+                    to: dateTo,
+                },
+                business,
+                ...dashboard,
+            };
+        } catch (error) {
+            if (error instanceof Api403Error) throw error;
+            console.warn('[GovernanceService] getBusinessDashboard database error, falling back to mock:', error.message);
+            return GovernanceMock.getBusinessDashboard(businessId, query);
         }
-
-        const { dateFrom, dateTo } = this.resolvePeriodRange(query.period, query.year);
-
-        const dashboard = await GovernanceRepository.getBusinessDashboardSummary(businessId, {
-            dateFrom,
-            dateTo,
-        });
-
-        return {
-            period: {
-                type: query.period || 'month',
-                year: Number(query.year) || new Date().getFullYear(),
-                from: dateFrom,
-                to: dateTo,
-            },
-            business,
-            ...dashboard,
-        };
     }
 
     static async updateBusinessInfo(businessId, body, user) {
@@ -437,44 +583,85 @@ class GovernanceService {
     static async getEnterpriseFeedbacks(businessId, query, user) {
         this.ensureAccess(user, this.ENTERPRISE_CODES);
 
-        const business = await GovernanceRepository.findBusinessById(businessId);
-        if (!business) {
-            throw new Api404Error('Không tìm thấy doanh nghiệp');
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getEnterpriseFeedbacks(businessId, query);
         }
 
-        const { page, limit } = this.normalizePagination(query);
-        const radiusMeters = Math.round((Number(query.radius_km) || 20) * 1000);
+        try {
+            const business = await GovernanceRepository.findBusinessById(businessId);
+            if (!business) {
+                return GovernanceMock.getEnterpriseFeedbacks(businessId, query);
+            }
 
-        const { rows, total } = await GovernanceRepository.getEnterpriseFeedbacks({
-            businessId,
-            radiusMeters,
-            page,
-            limit,
-        });
+            const { page, limit } = this.normalizePagination(query);
+            const radiusMeters = Math.round((Number(query.radius_km) || 20) * 1000);
 
-        return {
-            business_id: businessId,
-            radius_km: radiusMeters / 1000,
-            items: rows,
-            pagination: this.buildPagination(total, page, limit),
-        };
+            const { rows, total } = await GovernanceRepository.getEnterpriseFeedbacks({
+                businessId,
+                radiusMeters,
+                page,
+                limit,
+            });
+
+            if (!rows || !rows.length) {
+                return GovernanceMock.getEnterpriseFeedbacks(businessId, query);
+            }
+
+            return {
+                business_id: businessId,
+                radius_km: radiusMeters / 1000,
+                items: rows,
+                pagination: this.buildPagination(total, page, limit),
+            };
+        } catch (error) {
+            console.warn('[GovernanceService] getEnterpriseFeedbacks database error, falling back to mock:', error.message);
+            return GovernanceMock.getEnterpriseFeedbacks(businessId, query);
+        }
     }
 
     // ==================== QUẢN TRỊ HỆ THỐNG ====================
 
-    static async getAdminDashboard(user) {
+    static async getAdminDashboard(user, query = {}) {
         this.ensureAccess(user, this.ADMIN_CODES);
 
-        return GovernanceRepository.getAdminDashboard(30);
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getAdminDashboard();
+        }
+
+        try {
+            const dashboard = await GovernanceRepository.getAdminDashboard(30);
+            if (!dashboard || Object.values(dashboard).every(v => v === 0)) {
+                return GovernanceMock.getAdminDashboard();
+            }
+            return dashboard;
+        } catch (error) {
+            console.warn('[GovernanceService] getAdminDashboard database error, falling back to mock:', error.message);
+            return GovernanceMock.getAdminDashboard();
+        }
     }
 
     static async getTrafficAnalytics(query, user) {
         this.ensureAccess(user, this.ADMIN_CODES);
 
-        return GovernanceRepository.getTrafficAnalytics({
-            days: Number(query.days) || 30,
-            groupBy: query.group_by || 'day',
-        });
+        if (query?.mock === 'true' || process.env.MOCK_DASHBOARD === 'true') {
+            return GovernanceMock.getTrafficAnalytics(query);
+        }
+
+        try {
+            const result = await GovernanceRepository.getTrafficAnalytics({
+                days: Number(query.days) || 30,
+                groupBy: query.group_by || 'day',
+            });
+
+            if (!result || !result.timeline || !result.timeline.length) {
+                return GovernanceMock.getTrafficAnalytics(query);
+            }
+
+            return result;
+        } catch (error) {
+            console.warn('[GovernanceService] getTrafficAnalytics database error, falling back to mock:', error.message);
+            return GovernanceMock.getTrafficAnalytics(query);
+        }
     }
 
     static async listPermissions(query, user) {

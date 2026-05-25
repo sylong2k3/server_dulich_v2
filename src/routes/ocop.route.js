@@ -35,6 +35,8 @@ router.get('/categories', OcopController.getCategories);
 router.get('/geojson', OcopController.getOcopGeoJSON);
 // ROUTE: GET /me - Danh sách sản phẩm OCOP của doanh nghiệp tôi (phải đặt trước /:id).
 router.get('/me', authenticateToken, validateQuery(ocopQuerySchema), OcopController.getMy);
+// ROUTE: GET /spot/:id - Lấy danh sách sản phẩm OCOP theo spot_id.
+router.get('/spot/:id', optionalAuth, validateParams(uuidParamSchema), validateQuery(ocopQuerySchema), OcopController.getBySpotId);
 // ROUTE: GET /:id - Lấy chi tiết theo ID sản phẩm OCOP. Truy cập: optional auth; khách chỉ thấy is_active=true.
 router.get('/:id', optionalAuth, validateParams(uuidParamSchema), OcopController.getById);
 

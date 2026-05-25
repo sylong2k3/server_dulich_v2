@@ -98,7 +98,7 @@ class GovernanceController {
 
     // ==================== ADMIN ====================
     static getAdminDashboard = asyncHandler(async (req, res) => {
-        const result = await GovernanceService.getAdminDashboard(req.user);
+        const result = await GovernanceService.getAdminDashboard(req.user, req.query);
         return OK(res, 'Dashboard quản trị hệ thống', result);
     });
 
