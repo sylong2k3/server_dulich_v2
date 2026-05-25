@@ -214,6 +214,38 @@ async function seed() {
             console.log('User visit history table not found or skipped.');
         }
 
+        // 8. Seed Capacity Alert Configs at Province Level
+        console.log('\n--- Seeding Province Capacity Alert Configs ---');
+        let cacCount = 0;
+        try {
+            await query("DELETE FROM capacity_alert_configs WHERE spot_id IS NULL AND updated_by IS NOT NULL");
+            const provRes = await query('SELECT code, name FROM vn_units.provinces');
+            const provinces = provRes.rows;
+
+            for (const prov of provinces) {
+                const sql = `
+                    INSERT INTO capacity_alert_configs (
+                        spot_id, province_code, threshold_busy, threshold_near, threshold_over,
+                        notify_roles, updated_by, is_active
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                `;
+                await query(sql, [
+                    null,
+                    prov.code,
+                    70, // threshold_busy
+                    85, // threshold_near
+                    100, // threshold_over
+                    [2, 3], // notify_roles
+                    users[0].id,
+                    true
+                ]);
+                cacCount++;
+            }
+            console.log(`Successfully seeded ${cacCount} province-level capacity alert configs.`);
+        } catch (e) {
+            console.warn('Capacity alert configs table not found or skipped:', e.message);
+        }
+
         console.log('\n================ DATABASE SEEDING COMPLETED SUCCESSFULLY! ================');
     } catch (error) {
         console.error('\nSeeding failed with error:', error.message);
