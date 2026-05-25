@@ -35,6 +35,7 @@ class SpotRepository {
       radius_km = 10,
       created_by,
       lang: rawLang = 'vi',
+      exclude_parent_category_id,
     } = options;
     const lang = normalizeLang(rawLang);
 
@@ -57,6 +58,15 @@ class SpotRepository {
     if (parent_category_id !== undefined && parent_category_id !== null) {
       whereClause += ` AND (sc.parent_id = $${paramCount} OR ts.category_id = $${paramCount})`;
       values.push(Number(parent_category_id));
+      paramCount++;
+    }
+
+    if (exclude_parent_category_id !== undefined && exclude_parent_category_id !== null) {
+      whereClause += ` AND NOT EXISTS (
+        SELECT 1 FROM spot_categories exc_sc
+        WHERE exc_sc.id = ts.category_id AND exc_sc.parent_id = $${paramCount}
+      )`;
+      values.push(Number(exclude_parent_category_id));
       paramCount++;
     }
 

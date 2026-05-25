@@ -684,13 +684,19 @@ const HANDLERS = {
 
   async suggest_itinerary(args, { userId } = {}) {
     const { num_days, preferences = [], budget_vnd, start_location } = args;
-    if (!userId) {
+    const spotsForFallback = async () => {
       const { spots = [] } = await SpotService.getAllSpots({
         page: 1,
         limit: Math.min(12, Math.max(4, (Number(num_days) || 1) * 3)),
         sortBy: 'rating_avg',
         sortOrder: 'DESC',
+        exclude_parent_category_id: 3,
       });
+      return spots;
+    };
+
+    if (!userId) {
+      const spots = await spotsForFallback();
       return { item: buildFallbackItinerary({ num_days, preferences, budget_vnd, start_location }, spots) };
     }
 
@@ -701,12 +707,7 @@ const HANDLERS = {
         userId
       );
     } catch (_) {
-      const { spots = [] } = await SpotService.getAllSpots({
-        page: 1,
-        limit: Math.min(12, Math.max(4, (Number(num_days) || 1) * 3)),
-        sortBy: 'rating_avg',
-        sortOrder: 'DESC',
-      });
+      const spots = await spotsForFallback();
       return { item: buildFallbackItinerary({ num_days, preferences, budget_vnd, start_location }, spots) };
     }
     return {

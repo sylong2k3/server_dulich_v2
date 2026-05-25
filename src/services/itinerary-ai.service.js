@@ -92,7 +92,13 @@ Phản hồi PHẢI là JSON hợp lệ theo schema sau, không có markdown cod
     }
 
     async _fetchSpotsContext(preferences = []) {
-        const conditions = ["ts.status = 'active'"];
+        const conditions = [
+            "ts.status = 'active'",
+            `NOT EXISTS (
+                SELECT 1 FROM spot_categories exc_sc
+                WHERE exc_sc.id = ts.category_id AND exc_sc.parent_id = 3
+            )`,
+        ];
         const values = [];
         let idx = 1;
 
