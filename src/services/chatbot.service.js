@@ -1,4 +1,5 @@
 const ChatbotRepository = require('../models/repositories/chatbot.repository');
+const UserRepository = require('../models/repositories/user.repository');
 const { getOpenAIClient, MissingOpenAIKeyError } = require('../configs/openai');
 const { getToolDefinitions, callTool } = require('./chatbot.tools');
 const { Api404Error, Api403Error, Api400Error } = require('../core/error.response');
@@ -308,6 +309,35 @@ class ChatbotService {
         'Phiên ẩn danh cần header "x-anonymous-id" (UUID v4). Hãy đăng nhập hoặc tạo client id.'
       );
     }
+
+    if (session_type === 'manager') {
+      if (!userId) {
+        throw new Api403Error(
+          'Yêu cầu xác thực để tạo phiên chat quản lý.',
+          ['AUTH_REQUIRED']
+        );
+      }
+
+      const user = await UserRepository.findUserById(userId);
+      if (!user) {
+        throw new Api403Error('Người dùng không tồn tại', ['USER_NOT_FOUND']);
+      }
+
+      const roleCode = String(user.role?.code || '').trim().toLowerCase();
+      const allowedRoles = ['system_admin', 'ministry_manager', 'department_manager'];
+      const hasManagerRole = allowedRoles.includes(roleCode);
+      const hasPermission =
+        (typeof user.hasPermission === 'function') &&
+        (user.hasPermission('analytics', 'read') || user.hasPermission('governance', 'read'));
+
+      if (!hasManagerRole && !hasPermission) {
+        throw new Api403Error(
+          'Quyền truy cập bị từ chối. Chỉ quản trị viên hoặc nhà quản lý mới có thể tạo phiên chat này.',
+          ['INSUFFICIENT_PERMISSIONS']
+        );
+      }
+    }
+
     const context = userId ? null : { anon_id: anonymousId };
     return ChatbotRepository.createSession({
       user_id: userId || null,
