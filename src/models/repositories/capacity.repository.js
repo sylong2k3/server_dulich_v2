@@ -25,19 +25,102 @@ class CapacityRepository {
   }
 
   /**
-   * Tải trọng hiện tại tất cả spots (từ view v_current_capacity)
+   * Tải trọng hiện tại tất cả spots với bộ lọc, phân trang, và phân quyền
    */
-  static async getCurrentAll({ sortOrder = 'DESC' } = {}) {
-    const safeSortOrder = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+  static async getCurrentAll(options = {}) {
+    const {
+      page,
+      limit,
+      sortBy = 'capacity_pct',
+      sortOrder = 'DESC',
+      search,
+      status, // capacity status: normal, busy, near_full, overloaded
+      province_code,
+      created_by,
+      spot_status, // spots status: active, draft, etc.
+    } = options;
+
+    const values = [];
+    let paramIdx = 1;
+    let whereClauses = [];
+
+    if (search) {
+      whereClauses.push(`ts.name_vi ILIKE $${paramIdx++}`);
+      values.push(`%${search}%`);
+    }
+
+    if (province_code) {
+      whereClauses.push(`ts.province_code = $${paramIdx++}`);
+      values.push(province_code);
+    }
+
+    if (created_by) {
+      whereClauses.push(`ts.created_by = $${paramIdx++}`);
+      values.push(created_by);
+    }
+
+    if (spot_status) {
+      whereClauses.push(`ts.status = $${paramIdx++}`);
+      values.push(spot_status);
+    }
+
+    // Capacity status filter requires cl.status
+    if (status) {
+      whereClauses.push(`cl.status = $${paramIdx++}`);
+      values.push(status);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    // Validate and build sorting
+    const allowedSortFields = {
+      capacity_pct: 'cl.capacity_pct',
+      visitor_count: 'cl.visitor_count',
+      max_capacity: 'ts.max_capacity',
+      name_vi: 'ts.name_vi',
+      recorded_at: 'cl.recorded_at',
+    };
+    const sortField = allowedSortFields[sortBy] || 'cl.capacity_pct';
+    const order = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+    let paginationSql = '';
+    if (page && limit) {
+      const offset = (page - 1) * limit;
+      paginationSql = `LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+      values.push(limit, offset);
+    }
+
     const sql = `
-      ${this._currentCapacityBaseSql()}
-      ORDER BY
-        cl.capacity_pct ${safeSortOrder} NULLS LAST,
-        cl.visitor_count ${safeSortOrder} NULLS LAST,
-        ts.max_capacity ${safeSortOrder} NULLS LAST
+      SELECT
+        ts.id AS spot_id,
+        ts.name_vi,
+        cl.visitor_count,
+        cl.capacity_pct,
+        cl.status,
+        cl.recorded_at,
+        ts.max_capacity,
+        ts.alert_threshold_pct,
+        ST_AsGeoJSON(ts.geom)::jsonb AS geojson,
+        COUNT(*) OVER() AS total_count
+      FROM tourism_spots ts
+      LEFT JOIN LATERAL (
+        SELECT visitor_count, capacity_pct, status, recorded_at
+        FROM capacity_logs cl
+        WHERE cl.spot_id = ts.id
+        ORDER BY cl.recorded_at DESC
+        LIMIT 1
+      ) cl ON TRUE
+      ${whereSql}
+      ORDER BY ${sortField} ${order} NULLS LAST, ts.name_vi ASC
+      ${paginationSql}
     `;
-    const { rows } = await query(sql);
-    return rows;
+
+    const { rows } = await query(sql, values);
+    const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
+    
+    // Clean up total_count from each row before returning
+    const logs = rows.map(({ total_count, ...r }) => r);
+    return { logs, totalCount };
   }
 
   /**

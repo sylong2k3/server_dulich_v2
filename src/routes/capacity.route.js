@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const CapacityController = require('../controllers/capacity.controller');
-const { authenticateToken, checkPermission } = require('../middlewares/auth.middleware');
+const { authenticateToken, checkPermission, optionalAuth } = require('../middlewares/auth.middleware');
 const { validateBody, validateParams, validateQuery } = require('../middlewares/validation');
 const {
     spotIdParamSchema,
@@ -11,6 +11,7 @@ const {
     historyQuerySchema,
     statsQuerySchema,
     alternativesQuerySchema,
+    adminCapacityQuerySchema,
 } = require('../middlewares/validators/capacity.validation');
 
 // Public
@@ -21,7 +22,9 @@ router.get('/current/geojson', CapacityController.getCurrentGeoJSON);
 // ROUTE: GET /stream -> handler
 router.get('/stream', CapacityController.streamCapacity); // SSE — no auth for public map
 
-// Protected — đọc lịch sử
+// Protected — đọc lịch sử & quản trị tải trọng
+// ROUTE: GET /admin - Danh sách sức chứa phân trang và phân quyền quản trị. Xử lý bởi CapacityController.getAdminAll.
+router.get('/admin', authenticateToken, checkPermission('capacity', 'read'), validateQuery(adminCapacityQuerySchema), CapacityController.getAdminAll);
 // ROUTE: GET /spots/:spotId/history - Truy vấn sức chứa và mật độ khách. Xử lý bởi CapacityController.getHistory. Truy cập: yêu cầu đăng nhập.
 router.get('/spots/:spotId/history', authenticateToken, validateParams(spotIdParamSchema), validateQuery(historyQuerySchema), CapacityController.getHistory);
 // ROUTE: GET /spots/:spotId/stats - Lấy số liệu thống kê sức chứa và mật độ khách. Xử lý bởi CapacityController.getStats. Truy cập: yêu cầu đăng nhập, cần quyền capacity:read.

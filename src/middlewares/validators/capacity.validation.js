@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { paginationQuery, sortQuery, provinceCodeField } = require('./common/base-schemas');
 
 const uuidSchema = Joi.string().guid({ version: ['uuidv4'] });
 
@@ -44,6 +45,15 @@ const alternativesQuerySchema = Joi.object({
     radius_km: Joi.number().min(0.5).max(50).default(10),
     limit: Joi.number().integer().min(1).max(20).default(5),
     max_capacity_pct: Joi.number().min(0).max(100).default(80),
+});const adminCapacityQuerySchema = Joi.object({
+    ...paginationQuery({ defaultLimit: 20 }),
+    ...sortQuery(
+        ['capacity_pct', 'visitor_count', 'max_capacity', 'name_vi', 'recorded_at'],
+        { defaultSortBy: 'capacity_pct', defaultSortOrder: 'DESC' }
+    ),
+    search: Joi.string().trim().max(100).optional(),
+    status: Joi.string().valid('normal', 'busy', 'near_full', 'overloaded').optional(),
+    province_code: provinceCodeField(),
 });
 
 module.exports = {
@@ -54,5 +64,5 @@ module.exports = {
     historyQuerySchema,
     statsQuerySchema,
     alternativesQuerySchema,
+    adminCapacityQuerySchema,
 };
-

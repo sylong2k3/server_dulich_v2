@@ -1,10 +1,15 @@
 const CapacityRepository = require('../models/repositories/capacity.repository');
-const { Api404Error } = require('../core/error.response');
+const { Api404Error, Api400Error } = require('../core/error.response');
 const { formatPagination } = require('../utils/responseFormatter');
 const { cacheOrFetch, invalidateByPrefix } = require('../utils/cache.utils');
 const { notifyChannel } = require('../realtime/websocket.server');
 const NotificationService = require('./notification.service');
 const FKValidator = require('../utils/fk-validator');
+
+// Các role được bypass ownership check (quản lý nội dung toàn hệ thống)
+const GLOBAL_SPOT_ROLES = new Set(['system_admin', 'ministry_manager']);
+const DEPARTMENT_SPOT_ROLES = new Set(['department_manager']);
+const OWNER_SPOT_ROLES = new Set(['spot_operator', 'travel_company', 'service_provider']);
 
 // SSE clients registry
 const sseClients = new Set();
@@ -12,7 +17,38 @@ const sseClients = new Set();
 class CapacityService {
   async getCurrentAll(options = {}) {
     const sortOrder = String(options.sortOrder || options.sort_order || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    return cacheOrFetch(`capacity:current:${sortOrder}`, () => CapacityRepository.getCurrentAll({ sortOrder }), 30);
+    return cacheOrFetch(`capacity:current:${sortOrder}`, async () => {
+      const { logs } = await CapacityRepository.getCurrentAll({ sortOrder });
+      return logs;
+    }, 30);
+  }
+
+  async getAdminAll(options = {}, viewer = {}) {
+    const page = Math.max(1, parseInt(options.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(options.limit, 10) || 20));
+
+    // Apply RBAC listing scope
+    const effectiveOptions = this._applyListScope({ ...options, page, limit }, viewer?.user);
+
+    // Construct a cache key based on query filters and RBAC filters
+    const cacheKey = [
+      'capacity:admin',
+      `p${page}`,
+      `l${limit}`,
+      effectiveOptions.sortBy || 'capacity_pct',
+      effectiveOptions.sortOrder || 'DESC',
+      effectiveOptions.search || '',
+      effectiveOptions.status || 'all',
+      effectiveOptions.province_code || 'all',
+      effectiveOptions.created_by || 'any',
+      effectiveOptions.spot_status || 'all',
+    ].join(':');
+
+    return cacheOrFetch(cacheKey, async () => {
+      const { logs, totalCount } = await CapacityRepository.getCurrentAll(effectiveOptions);
+      const result = formatPagination(logs, totalCount, page, limit);
+      return { capacity: result.data, pagination: result.pagination };
+    }, 30);
   }
 
   async getCurrentGeoJSON() {
@@ -216,6 +252,45 @@ class CapacityService {
 
   getSSEClientCount() {
     return sseClients.size;
+  }
+
+  _applyListScope(options = {}, user) {
+    const roleCode = this._roleCode(user);
+    const scoped = { ...options };
+
+    if (GLOBAL_SPOT_ROLES.has(roleCode)) {
+      return scoped;
+    }
+
+    if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
+      const provinceCode = this._resolveProvinceCode(user, scoped);
+      if (!provinceCode) {
+        throw new Api400Error('Cần province_code để giới hạn dữ liệu của Sở');
+      }
+      scoped.province_code = provinceCode;
+      return scoped;
+    }
+
+    if (OWNER_SPOT_ROLES.has(roleCode)) {
+      scoped.created_by = user?.id;
+      return scoped;
+    }
+
+    scoped.spot_status = 'active';
+    return scoped;
+  }
+
+  _resolveProvinceCode(user, options = {}) {
+    return user?.province_code
+      || user?.province?.code
+      || user?.department?.province_code
+      || user?.profile?.province_code
+      || options.province_code
+      || null;
+  }
+
+  _roleCode(user) {
+    return String(user?.role?.code || '').trim().toLowerCase();
   }
 }
 

@@ -8,6 +8,11 @@ class CapacityController {
     return OK(res, 'Lấy tải trọng hiện tại thành công', { capacity: data });
   });
 
+  static getAdminAll = asyncHandler(async (req, res) => {
+    const result = await capacityService.getAdminAll(req.query, { user: req.user });
+    return OK(res, 'Lấy danh sách tải trọng quản trị thành công', result);
+  });
+
   static getCurrentGeoJSON = asyncHandler(async (req, res) => {
     const geojson = await capacityService.getCurrentGeoJSON();
     return OK(res, 'Lấy GeoJSON tải trọng thành công', geojson);
