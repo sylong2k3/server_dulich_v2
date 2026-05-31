@@ -5,6 +5,7 @@ const { authenticateToken, checkPermission, optionalAuth } = require('../middlew
 const { validateBody, validateParams, validateQuery } = require('../middlewares/validation');
 const {
     spotIdParamSchema,
+    tourIdParamSchema,
     logCapacitySchema,
     spotCapacitySettingsSchema,
     alertConfigSchema,
@@ -19,6 +20,8 @@ const {
 router.get('/current', CapacityController.getCurrentAll);
 // ROUTE: GET /current/geojson - Truy vấn sức chứa và mật độ khách. Xử lý bởi CapacityController.getCurrentGeoJSON. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.
 router.get('/current/geojson', CapacityController.getCurrentGeoJSON);
+// ROUTE: GET /tours/:tourId/current - Tổng hợp tải trọng hiện tại của tuyến du lịch từ các điểm dừng.
+router.get('/tours/:tourId/current', validateParams(tourIdParamSchema), CapacityController.getCurrentByTour);
 // ROUTE: GET /stream -> handler
 router.get('/stream', CapacityController.streamCapacity); // SSE — no auth for public map
 

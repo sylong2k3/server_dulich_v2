@@ -7,6 +7,10 @@ const spotIdParamSchema = Joi.object({
     spotId: uuidSchema.required(),
 });
 
+const tourIdParamSchema = Joi.object({
+    tourId: uuidSchema.required(),
+});
+
 const logCapacitySchema = Joi.object({
     visitor_count: Joi.number().integer().min(0).required(),
     data_source: Joi.string().valid('manual', 'iot', 'api', 'realtime').default('manual'),
@@ -58,6 +62,7 @@ const alternativesQuerySchema = Joi.object({
 
 module.exports = {
     spotIdParamSchema,
+    tourIdParamSchema,
     logCapacitySchema,
     spotCapacitySettingsSchema,
     alertConfigSchema,

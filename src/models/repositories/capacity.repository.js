@@ -164,6 +164,79 @@ class CapacityRepository {
     return rows[0] || null;
   }
 
+  static async getCurrentByTour(tourId) {
+    const sql = `
+      SELECT
+        tp.id AS tour_id,
+        tp.name_vi AS tour_name_vi,
+        tp.name_en AS tour_name_en,
+        tp.slug AS tour_slug,
+        tp.status AS tour_status,
+        tp.duration_days,
+        tp.max_guests,
+        tp.province_code,
+        tps.id AS stop_id,
+        tps.day_number,
+        tps.stop_order,
+        tps.spot_id,
+        tps.business_id,
+        tps.title_vi,
+        tps.description_vi,
+        tps.planned_duration_min,
+        ts.name_vi AS spot_name_vi,
+        ts.name_en AS spot_name_en,
+        ts.max_capacity,
+        vc.visitor_count,
+        vc.capacity_pct,
+        vc.status AS capacity_status,
+        vc.recorded_at,
+        ST_AsGeoJSON(COALESCE(ts.geom, bs.geom))::jsonb AS geojson
+      FROM tour_packages tp
+      LEFT JOIN tour_package_stops tps ON tps.tour_package_id = tp.id
+      LEFT JOIN tourism_spots ts ON ts.id = tps.spot_id
+      LEFT JOIN businesses bs ON bs.id = tps.business_id
+      LEFT JOIN v_current_capacity vc ON vc.spot_id = tps.spot_id
+      WHERE tp.id = $1
+        AND tp.status = 'published'
+      ORDER BY tps.day_number ASC NULLS LAST, tps.stop_order ASC NULLS LAST
+    `;
+
+    const { rows } = await query(sql, [tourId]);
+    if (!rows.length) return null;
+
+    const first = rows[0];
+    return {
+      tour_id: first.tour_id,
+      tour_name_vi: first.tour_name_vi,
+      tour_name_en: first.tour_name_en,
+      tour_slug: first.tour_slug,
+      tour_status: first.tour_status,
+      duration_days: first.duration_days,
+      max_guests: first.max_guests,
+      province_code: first.province_code,
+      stops: rows
+        .filter((row) => row.stop_id)
+        .map((row) => ({
+          stop_id: row.stop_id,
+          day_number: row.day_number,
+          stop_order: row.stop_order,
+          spot_id: row.spot_id,
+          business_id: row.business_id,
+          title_vi: row.title_vi,
+          description_vi: row.description_vi,
+          planned_duration_min: row.planned_duration_min,
+          spot_name_vi: row.spot_name_vi,
+          spot_name_en: row.spot_name_en,
+          max_capacity: row.max_capacity,
+          visitor_count: row.visitor_count,
+          capacity_pct: row.capacity_pct,
+          capacity_status: row.capacity_status,
+          recorded_at: row.recorded_at,
+          geojson: row.geojson,
+        })),
+    };
+  }
+
   /**
    * Lịch sử tải trọng
    */

@@ -59,6 +59,82 @@ class CapacityService {
     return CapacityRepository.getCurrentBySpot(spotId);
   }
 
+  async getCurrentByTour(tourId) {
+    return cacheOrFetch(`capacity:tour:current:${tourId}`, async () => {
+      const tour = await CapacityRepository.getCurrentByTour(tourId);
+      if (!tour) throw new Api404Error('Không tìm thấy tuyến du lịch đã xuất bản');
+
+      const stops = tour.stops.map((stop) => this._normalizeTourStopCapacity(stop));
+      const spotStops = stops.filter((stop) => Boolean(stop.spot_id));
+      const capacityTrackedStops = spotStops.filter((stop) => stop.max_capacity > 0);
+      const capacityPctStops = spotStops.filter((stop) => stop.capacity_pct !== null);
+
+      const totalCurrentVisitors = capacityTrackedStops.reduce(
+        (sum, stop) => sum + (stop.visitor_count || 0),
+        0,
+      );
+      const totalObservedVisitors = spotStops.reduce(
+        (sum, stop) => sum + (stop.visitor_count || 0),
+        0,
+      );
+      const totalMaxCapacity = capacityTrackedStops.reduce(
+        (sum, stop) => sum + stop.max_capacity,
+        0,
+      );
+      const routeCapacityPct = totalMaxCapacity > 0
+        ? this._round((totalCurrentVisitors / totalMaxCapacity) * 100)
+        : null;
+
+      const avgCapacityPct = capacityPctStops.length
+        ? this._round(capacityPctStops.reduce((sum, stop) => sum + stop.capacity_pct, 0) / capacityPctStops.length)
+        : null;
+
+      const bottleneckStop = capacityPctStops.reduce((current, stop) => {
+        if (!current || stop.capacity_pct > current.capacity_pct) return stop;
+        return current;
+      }, null);
+
+      const worstStopRank = stops.reduce((rank, stop) => Math.max(rank, this._statusRank(stop.capacity_status)), 0);
+      const routeRank = routeCapacityPct === null ? 0 : this._statusRank(this._statusFromPct(routeCapacityPct));
+      const statusRank = Math.max(worstStopRank, routeRank);
+
+      return {
+        tour: {
+          id: tour.tour_id,
+          name_vi: tour.tour_name_vi,
+          name_en: tour.tour_name_en,
+          slug: tour.tour_slug,
+          status: tour.tour_status,
+          duration_days: tour.duration_days,
+          max_guests: this._toNumber(tour.max_guests),
+          province_code: tour.province_code,
+        },
+        summary: {
+          total_stops: stops.length,
+          spot_stop_count: spotStops.length,
+          capacity_tracked_stops: capacityTrackedStops.length,
+          stops_without_capacity_data: spotStops.filter((stop) => stop.capacity_pct === null).length,
+          stops_without_max_capacity: spotStops.filter((stop) => !stop.max_capacity || stop.max_capacity <= 0).length,
+          total_current_visitors: totalCurrentVisitors,
+          total_observed_visitors: totalObservedVisitors,
+          total_max_capacity: totalMaxCapacity,
+          route_capacity_pct: routeCapacityPct,
+          avg_capacity_pct: avgCapacityPct,
+          bottleneck_capacity_pct: bottleneckStop?.capacity_pct ?? null,
+          bottleneck_stop: bottleneckStop ? {
+            stop_id: bottleneckStop.stop_id,
+            spot_id: bottleneckStop.spot_id,
+            name_vi: bottleneckStop.spot_name_vi || bottleneckStop.title_vi,
+            capacity_pct: bottleneckStop.capacity_pct,
+            capacity_status: bottleneckStop.capacity_status,
+          } : null,
+          status: statusRank > 0 ? this._statusFromRank(statusRank) : 'unknown',
+        },
+        stops,
+      };
+    }, 30);
+  }
+
   async getHistory(spotId, options = {}) {
     const page = Math.max(1, parseInt(options.page, 10) || 1);
     const limit = Math.min(500, Math.max(1, parseInt(options.limit, 10) || 100));
@@ -291,6 +367,51 @@ class CapacityService {
 
   _roleCode(user) {
     return String(user?.role?.code || '').trim().toLowerCase();
+  }
+
+  _normalizeTourStopCapacity(stop) {
+    return {
+      ...stop,
+      max_capacity: this._toNumber(stop.max_capacity),
+      visitor_count: this._toNumber(stop.visitor_count),
+      capacity_pct: this._toNumber(stop.capacity_pct),
+      capacity_status: stop.capacity_status || null,
+    };
+  }
+
+  _toNumber(value) {
+    if (value === null || value === undefined) return null;
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : null;
+  }
+
+  _round(value) {
+    return Math.round(Number(value) * 100) / 100;
+  }
+
+  _statusRank(status) {
+    const ranks = {
+      normal: 1,
+      busy: 2,
+      near_full: 3,
+      overloaded: 4,
+    };
+    return ranks[status] || 0;
+  }
+
+  _statusFromRank(rank) {
+    if (rank >= 4) return 'overloaded';
+    if (rank === 3) return 'near_full';
+    if (rank === 2) return 'busy';
+    if (rank === 1) return 'normal';
+    return 'unknown';
+  }
+
+  _statusFromPct(capacityPct) {
+    if (capacityPct >= 100) return 'overloaded';
+    if (capacityPct >= 85) return 'near_full';
+    if (capacityPct >= 60) return 'busy';
+    return 'normal';
   }
 }
 

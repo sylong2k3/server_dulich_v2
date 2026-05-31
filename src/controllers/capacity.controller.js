@@ -18,6 +18,11 @@ class CapacityController {
     return OK(res, 'Lấy GeoJSON tải trọng thành công', geojson);
   });
 
+  static getCurrentByTour = asyncHandler(async (req, res) => {
+    const result = await capacityService.getCurrentByTour(req.params.tourId);
+    return OK(res, 'Lấy tải trọng tuyến du lịch thành công', result);
+  });
+
   static getHistory = asyncHandler(async (req, res) => {
     const result = await capacityService.getHistory(req.params.spotId, req.query);
     return OK(res, 'Lấy lịch sử tải trọng thành công', result);

@@ -153,6 +153,7 @@
 |---|---|---|---|
 | GET | `/current` | Tải hiện tại tất cả điểm | Public |
 | GET | `/current/geojson` | GeoJSON tải điểm | Public |
+| GET | `/tours/:tourId/current` | Tổng hợp tải hiện tại của tuyến/tour | Public |
 | GET | `/stream` | SSE stream real-time | Public |
 | GET | `/spots/:spotId/history` | Lịch sử tải | Public |
 | GET | `/spots/:spotId/stats` | Thống kê tải | Public |
@@ -537,3 +538,89 @@ Các Action được thiết kế và hỗ trợ bao gồm:
 | `travel_company` | Công ty lữ hành |
 | `service_provider` | Đơn vị cung cấp dịch vụ |
 | `tourist` | Du khách |
+
+---
+
+## API Tải Tuyến Du Lịch
+
+### `GET /api/v1/capacity/tours/:tourId/current`
+
+Tổng hợp tải hiện tại của một tuyến du lịch đã xuất bản bằng cách lấy các điểm dừng trong `tour_package_stops` và ghép với tải hiện tại trong `v_current_capacity`.
+
+**Xác thực:** Public
+
+**Tham số đường dẫn**
+
+| Tham số | Kiểu | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `tourId` | UUID | Có | ID của `tour_packages` có `status = 'published'` |
+
+**Dữ liệu phản hồi**
+
+```json
+{
+  "tour": {
+    "id": "uuid",
+    "name_vi": "Tour Tràng An - Bái Đính",
+    "name_en": null,
+    "slug": "tour-trang-an-bai-dinh",
+    "status": "published",
+    "duration_days": 1,
+    "max_guests": 30,
+    "province_code": "35"
+  },
+  "summary": {
+    "total_stops": 3,
+    "spot_stop_count": 3,
+    "capacity_tracked_stops": 2,
+    "stops_without_capacity_data": 1,
+    "stops_without_max_capacity": 1,
+    "total_current_visitors": 1200,
+    "total_observed_visitors": 1350,
+    "total_max_capacity": 2000,
+    "route_capacity_pct": 60,
+    "avg_capacity_pct": 72.5,
+    "bottleneck_capacity_pct": 90,
+    "bottleneck_stop": {
+      "stop_id": "uuid",
+      "spot_id": "uuid",
+      "name_vi": "Khu du lịch sinh thái Tràng An",
+      "capacity_pct": 90,
+      "capacity_status": "near_full"
+    },
+    "status": "near_full"
+  },
+  "stops": [
+    {
+      "stop_id": "uuid",
+      "day_number": 1,
+      "stop_order": 1,
+      "spot_id": "uuid",
+      "business_id": null,
+      "title_vi": "Tràng An",
+      "description_vi": null,
+      "planned_duration_min": 120,
+      "spot_name_vi": "Khu du lịch sinh thái Tràng An",
+      "spot_name_en": null,
+      "max_capacity": 2000,
+      "visitor_count": 1200,
+      "capacity_pct": 60,
+      "capacity_status": "busy",
+      "recorded_at": "2026-05-31T10:00:00.000Z",
+      "geojson": {
+        "type": "Point",
+        "coordinates": [105.9, 20.25]
+      }
+    }
+  ]
+}
+```
+
+**Quy tắc tính toán**
+
+- `route_capacity_pct = total_current_visitors / total_max_capacity * 100`.
+- `total_current_visitors` và `total_max_capacity` chỉ tính các stop gắn với điểm du lịch và có `max_capacity > 0`.
+- `total_observed_visitors` tính tất cả stop gắn với điểm du lịch có số khách mới nhất, kể cả khi điểm đó chưa có `max_capacity`.
+- `bottleneck_stop` là điểm dừng có `capacity_pct` cao nhất.
+- `status` lấy trạng thái xấu nhất giữa phần trăm tải tổng hợp của tuyến và trạng thái từng stop: `overloaded > near_full > busy > normal > unknown`.
+- `unknown` nghĩa là tuyến chưa đủ dữ liệu tải để đánh giá.
