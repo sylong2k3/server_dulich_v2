@@ -463,7 +463,7 @@ class GovernanceRepository {
         return rows[0] ? new BusinessActivityReport(rows[0]) : null;
     }
 
-    static async listBusinessActivityReports({ page = 1, limit = 10, business_id, report_period, status }) {
+    static async listBusinessActivityReports({ page = 1, limit = 10, business_id, owner_id, report_period, status }) {
         const offset = (page - 1) * limit;
         const values = [];
         let p = 1;
@@ -472,6 +472,12 @@ class GovernanceRepository {
         if (business_id) {
             conditions.push(`bar.business_id = $${p}`);
             values.push(business_id);
+            p++;
+        }
+
+        if (owner_id) {
+            conditions.push(`b.owner_id = $${p}`);
+            values.push(owner_id);
             p++;
         }
 

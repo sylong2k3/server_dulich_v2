@@ -54,6 +54,25 @@ class GovernanceService {
         return { page, limit };
     }
 
+    static isAdmin(user) {
+        return this.ADMIN_CODES.includes(String(user?.role?.code || '').toLowerCase());
+    }
+
+    static assertOwnsBusiness(business, user, message = 'Access denied for this business') {
+        if (this.isAdmin(user)) return;
+        if (!business || business.owner_id !== user?.id) {
+            throw new Api403Error(message);
+        }
+    }
+
+    static async ensureBusinessAccess(businessId, user, message) {
+        const business = await GovernanceRepository.findBusinessById(businessId);
+        if (!business) return null;
+
+        this.assertOwnsBusiness(business, user, message);
+        return business;
+    }
+
     static buildPagination(total, page, limit) {
         return {
             page,
@@ -486,6 +505,15 @@ class GovernanceService {
 
     static async createBusinessActivityReport(body, user) {
         this.ensureAccess(user, this.ENTERPRISE_CODES);
+        const business = await this.ensureBusinessAccess(
+            body.business_id,
+            user,
+            'Bạn không có quyền tạo báo cáo cho doanh nghiệp này'
+        );
+
+        if (!business) {
+            throw new Api404Error('Không tìm thấy doanh nghiệp để tạo báo cáo');
+        }
 
         return GovernanceRepository.createBusinessActivityReport({
             ...body,
@@ -502,8 +530,17 @@ class GovernanceService {
 
         try {
             const { page, limit } = this.normalizePagination(query);
+            const scopedBusiness = query.business_id
+                ? await this.ensureBusinessAccess(
+                    query.business_id,
+                    user,
+                    'Bạn không có quyền xem báo cáo của doanh nghiệp này'
+                )
+                : null;
             const { rows, total } = await GovernanceRepository.listBusinessActivityReports({
                 ...query,
+                business_id: scopedBusiness?.id || query.business_id,
+                owner_id: this.isAdmin(user) || query.business_id ? undefined : user?.id,
                 page,
                 limit,
             });
@@ -571,6 +608,15 @@ class GovernanceService {
 
     static async updateBusinessInfo(businessId, body, user) {
         this.ensureAccess(user, this.ENTERPRISE_CODES);
+        const business = await this.ensureBusinessAccess(
+            businessId,
+            user,
+            'Bạn không có quyền cập nhật doanh nghiệp này'
+        );
+
+        if (!business) {
+            throw new Api404Error('KhÃ´ng tÃ¬m tháº¥y doanh nghiá»‡p Ä‘á»ƒ cáº­p nháº­t');
+        }
 
         const updated = await GovernanceRepository.updateBusinessInfo(businessId, body);
         if (!updated) {
@@ -592,6 +638,7 @@ class GovernanceService {
             if (!business) {
                 return GovernanceMock.getEnterpriseFeedbacks(businessId, query);
             }
+            this.assertOwnsBusiness(business, user, 'Bạn không có quyền xem phản ánh của doanh nghiệp này');
 
             const { page, limit } = this.normalizePagination(query);
             const radiusMeters = Math.round((Number(query.radius_km) || 20) * 1000);
