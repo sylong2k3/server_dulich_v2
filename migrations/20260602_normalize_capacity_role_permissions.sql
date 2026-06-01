@@ -8,6 +8,18 @@ ADD COLUMN IF NOT EXISTS province_code VARCHAR(20) REFERENCES vn_units.provinces
 CREATE INDEX IF NOT EXISTS idx_users_province_code
 ON auth.users(province_code);
 
+UPDATE auth.users u
+SET province_code = '37'
+FROM auth.roles r
+WHERE u.role_id = r.id
+  AND r.code = 'department_manager'
+  AND u.province_code IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM vn_units.provinces p
+      WHERE p.code = '37'
+  );
+
 INSERT INTO auth.permissions (resource, action, name_vi, description)
 VALUES
     (

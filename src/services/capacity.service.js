@@ -1,4 +1,4 @@
-const CapacityRepository = require('../models/repositories/capacity.repository');
+﻿const CapacityRepository = require('../models/repositories/capacity.repository');
 const { Api404Error, Api400Error, Api403Error } = require('../core/error.response');
 const { formatPagination } = require('../utils/responseFormatter');
 const { cacheOrFetch, invalidateByPrefix } = require('../utils/cache.utils');
@@ -360,9 +360,6 @@ class CapacityService {
 
     if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
       const provinceCode = this._resolveProvinceCode(user);
-      if (!provinceCode) {
-        throw new Api400Error('Cần province_code trong hồ sơ tài khoản Sở để giới hạn dữ liệu theo tỉnh');
-      }
       if (String(spot.province_code || '') === String(provinceCode)) return spot;
       throw new Api403Error('Sở chỉ được thao tác dữ liệu trong tỉnh của mình');
     }
@@ -400,9 +397,6 @@ class CapacityService {
 
     if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
       const provinceCode = this._resolveProvinceCode(user, scoped);
-      if (!provinceCode) {
-        throw new Api400Error('Cần province_code để giới hạn cấu hình cảnh báo của Sở');
-      }
       scoped.province_code = provinceCode;
       return scoped;
     }
@@ -429,9 +423,6 @@ class CapacityService {
 
     if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
       const provinceCode = this._resolveProvinceCode(user, scoped);
-      if (!provinceCode) {
-        throw new Api400Error('Cần province_code để giới hạn dữ liệu của Sở');
-      }
       scoped.province_code = provinceCode;
       return scoped;
     }
@@ -451,7 +442,7 @@ class CapacityService {
       || user?.department?.province_code
       || user?.profile?.province_code
       || options.province_code
-      || null;
+      || DEFAULT_DEPARTMENT_PROVINCE_CODE;
   }
 
   _roleCode(user) {
@@ -505,3 +496,4 @@ class CapacityService {
 }
 
 module.exports = new CapacityService();
+
