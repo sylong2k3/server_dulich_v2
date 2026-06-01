@@ -342,7 +342,7 @@ class CapacityService {
   async _ensureSpotAccess(spotId, user, { write = false } = {}) {
     const spot = await CapacityRepository.getSpotAccessInfo(spotId);
     if (!spot) {
-      throw new Api404Error('Khong tim thay diem du lich');
+      throw new Api404Error('Không tìm thấy điểm du lịch');
     }
 
     const roleCode = this._roleCode(user);
@@ -353,7 +353,7 @@ class CapacityService {
 
     if (roleCode === 'ministry_manager') {
       if (write) {
-        throw new Api403Error('Bo chi duoc xem/giam sat du lieu suc chua');
+        throw new Api403Error('Bộ chỉ được xem/giám sát dữ liệu sức chứa');
       }
       return spot;
     }
@@ -361,10 +361,10 @@ class CapacityService {
     if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
       const provinceCode = this._resolveProvinceCode(user);
       if (!provinceCode) {
-        throw new Api400Error('Can province_code trong ho so tai khoan So de gioi han du lieu theo tinh');
+        throw new Api400Error('Cần province_code trong hồ sơ tài khoản Sở để giới hạn dữ liệu theo tỉnh');
       }
       if (String(spot.province_code || '') === String(provinceCode)) return spot;
-      throw new Api403Error('So chi duoc thao tac du lieu trong tinh cua minh');
+      throw new Api403Error('Sở chỉ được thao tác dữ liệu trong tỉnh của mình');
     }
 
     if (OWNER_SPOT_ROLES.has(roleCode)) {
@@ -373,10 +373,10 @@ class CapacityService {
       const ownsThroughBusiness = await CapacityRepository.userOwnsSpotThroughBusiness(userId, spotId);
       if (ownsThroughBusiness) return spot;
 
-      throw new Api403Error('Doanh nghiep chi duoc thao tac diem minh van hanh hoac dich vu co lien ket');
+      throw new Api403Error('Doanh nghiệp chỉ được thao tác điểm mình vận hành hoặc dịch vụ có liên kết');
     }
 
-    throw new Api403Error('Ban khong co quyen thao tac du lieu suc chua');
+    throw new Api403Error('Bạn không có quyền thao tác dữ liệu sức chứa');
   }
 
   async _applyAlertConfigScope(options = {}, user, { write = false } = {}) {
@@ -388,7 +388,7 @@ class CapacityService {
 
     if (roleCode === 'ministry_manager') {
       if (write) {
-        throw new Api403Error('Bo chi duoc xem cau hinh canh bao suc chua');
+        throw new Api403Error('Bộ chỉ được xem cấu hình cảnh báo sức chứa');
       }
       return scoped;
     }
@@ -401,7 +401,7 @@ class CapacityService {
     if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
       const provinceCode = this._resolveProvinceCode(user, scoped);
       if (!provinceCode) {
-        throw new Api400Error('Can province_code de gioi han cau hinh canh bao cua So');
+        throw new Api400Error('Cần province_code để giới hạn cấu hình cảnh báo của Sở');
       }
       scoped.province_code = provinceCode;
       return scoped;
@@ -409,7 +409,7 @@ class CapacityService {
 
     if (OWNER_SPOT_ROLES.has(roleCode)) {
       if (write) {
-        throw new Api400Error('Doanh nghiep can chon spot_id cu the de cau hinh canh bao');
+        throw new Api400Error('Doanh nghiệp cần chọn spot_id cụ thể để cấu hình cảnh báo');
       }
       scoped.owner_id = user?.id;
       return scoped;
