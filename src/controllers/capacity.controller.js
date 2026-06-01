@@ -24,12 +24,12 @@ class CapacityController {
   });
 
   static getHistory = asyncHandler(async (req, res) => {
-    const result = await capacityService.getHistory(req.params.spotId, req.query);
+    const result = await capacityService.getHistory(req.params.spotId, req.query, { user: req.user });
     return OK(res, 'Lấy lịch sử tải trọng thành công', result);
   });
 
   static getStats = asyncHandler(async (req, res) => {
-    const stats = await capacityService.getStats(req.params.spotId, req.query);
+    const stats = await capacityService.getStats(req.params.spotId, req.query, { user: req.user });
     return OK(res, 'Lấy thống kê tải trọng thành công', { stats });
   });
 
@@ -40,12 +40,12 @@ class CapacityController {
       data_source: req.body.data_source || 'manual',
       recorded_by: req.user?.id,
     };
-    const log = await capacityService.logCapacity(data);
+    const log = await capacityService.logCapacity(data, { user: req.user });
     return CREATED(res, 'Ghi nhận tải trọng thành công', { log });
   });
 
   static updateSpotSettings = asyncHandler(async (req, res) => {
-    const settings = await capacityService.updateSpotSettings(req.params.spotId, req.body);
+    const settings = await capacityService.updateSpotSettings(req.params.spotId, req.body, { user: req.user });
     return OK(res, 'Cập nhật cấu hình sức chứa điểm du lịch thành công', { settings });
   });
 
@@ -59,7 +59,7 @@ class CapacityController {
   });
 
   static getAlertConfigs = asyncHandler(async (req, res) => {
-    const configs = await capacityService.getAlertConfigs(req.query);
+    const configs = await capacityService.getAlertConfigs(req.query, { user: req.user });
     return OK(res, 'Lấy cấu hình cảnh báo thành công', { configs });
   });
 
@@ -67,7 +67,7 @@ class CapacityController {
     const config = await capacityService.upsertAlertConfig({
       ...req.body,
       updated_by: req.user?.id,
-    });
+    }, { user: req.user });
     return CREATED(res, 'Cập nhật cấu hình cảnh báo thành công', { config });
   });
 

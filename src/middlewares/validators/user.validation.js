@@ -49,6 +49,7 @@ const createUserSchema = Joi.object({
   date_of_birth: Joi.date().optional(),
   gender: Joi.string().max(10).optional().allow("", null),
   nationality: Joi.string().max(100).optional().allow("", null),
+  province_code: Joi.string().trim().max(20).optional().allow("", null),
   preferred_language: Joi.string().max(10).optional().allow("", null),
   preferred_currency: Joi.string().max(10).optional().allow("", null),
   preferred_distance: Joi.string().max(10).optional().allow("", null),
@@ -71,6 +72,7 @@ const updateUserSchema = Joi.object({
   date_of_birth: Joi.date().optional().allow(null),
   gender: Joi.string().max(10).optional().allow("", null),
   nationality: Joi.string().max(100).optional().allow("", null),
+  province_code: Joi.string().trim().max(20).optional().allow("", null),
   preferred_language: Joi.string().max(10).optional().allow("", null),
   preferred_currency: Joi.string().max(10).optional().allow("", null),
   preferred_distance: Joi.string().max(10).optional().allow("", null),
@@ -89,6 +91,7 @@ const getUsersQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).optional().default(10),
   search: Joi.string().max(200).optional().allow(""),
   role_id: Joi.number().integer().min(1).optional(),
+  province_code: Joi.string().trim().max(20).optional().allow("", null),
   is_active: Joi.boolean().optional(),
   sortBy: Joi.string()
     .valid("id", "created_at", "updated_at", "email", "full_name", "phone", "last_login_at")

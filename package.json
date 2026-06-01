@@ -8,6 +8,8 @@
     "start:cluster": "node cluster.js",
     "dev": "nodemon server.js",
     "dev:cluster": "nodemon cluster.js",
+    "db:grant-capacity-read:travel-company": "node scripts/apply-sql-file.js migrations/20260602_grant_travel_company_capacity_read.sql",
+    "db:normalize-capacity-roles": "node scripts/apply-sql-file.js migrations/20260602_normalize_capacity_role_permissions.sql",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

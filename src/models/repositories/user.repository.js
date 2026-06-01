@@ -103,6 +103,7 @@ class UserRepository {
       page,
       limit,
       role_id,
+      province_code,
       search,
       is_active,
       sortBy,
@@ -127,6 +128,11 @@ class UserRepository {
     if (role_id) {
       sql += ` AND u.role_id = $${paramCount++}`;
       values.push(role_id);
+    }
+
+    if (province_code) {
+      sql += ` AND u.province_code = $${paramCount++}`;
+      values.push(province_code);
     }
 
     if (is_active !== undefined) {

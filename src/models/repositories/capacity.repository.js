@@ -37,6 +37,7 @@ class CapacityRepository {
       status, // capacity status: normal, busy, near_full, overloaded
       province_code,
       created_by,
+      owner_id,
       spot_status, // spots status: active, draft, etc.
     } = options;
 
@@ -57,6 +58,23 @@ class CapacityRepository {
     if (created_by) {
       whereClauses.push(`ts.created_by = $${paramIdx++}`);
       values.push(created_by);
+    }
+
+    if (owner_id) {
+      whereClauses.push(`(
+        ts.created_by = $${paramIdx}
+        OR EXISTS (
+          SELECT 1
+          FROM services s
+          INNER JOIN businesses b ON b.id = s.business_id
+          WHERE s.spot_id = ts.id
+            AND s.is_active = TRUE
+            AND b.owner_id = $${paramIdx}
+            AND b.status = 'approved'
+        )
+      )`);
+      values.push(owner_id);
+      paramIdx++;
     }
 
     if (spot_status) {
@@ -162,6 +180,35 @@ class CapacityRepository {
     `;
     const { rows } = await query(sql, [spotId]);
     return rows[0] || null;
+  }
+
+  static async getSpotAccessInfo(spotId) {
+    const sql = `
+      SELECT id, province_code, created_by, status
+      FROM tourism_spots
+      WHERE id = $1
+        AND status != 'deleted'
+      LIMIT 1
+    `;
+    const { rows } = await query(sql, [spotId]);
+    return rows[0] || null;
+  }
+
+  static async userOwnsSpotThroughBusiness(userId, spotId) {
+    if (!userId || !spotId) return false;
+
+    const sql = `
+      SELECT 1
+      FROM services s
+      INNER JOIN businesses b ON b.id = s.business_id
+      WHERE s.spot_id = $1
+        AND s.is_active = TRUE
+        AND b.owner_id = $2
+        AND b.status = 'approved'
+      LIMIT 1
+    `;
+    const { rows } = await query(sql, [spotId, userId]);
+    return rows.length > 0;
   }
 
   static async getCurrentByTour(tourId) {
@@ -388,16 +435,54 @@ class CapacityRepository {
    * Lấy cấu hình cảnh báo
    */
   static async getAlertConfigs(options = {}) {
-    let sql = 'SELECT * FROM capacity_alert_configs WHERE is_active = true';
     const values = [];
+    const conditions = ['c.is_active = TRUE'];
+    let paramIdx = 1;
+
     if (options.spot_id) {
-      sql += ' AND spot_id = $1';
+      conditions.push(`c.spot_id = $${paramIdx++}`);
       values.push(options.spot_id);
     }
+
     if (options.province_code) {
-      sql += values.length > 0 ? ' AND province_code = $2' : ' AND province_code = $1';
+      conditions.push(`(c.province_code = $${paramIdx} OR ts.province_code = $${paramIdx})`);
       values.push(options.province_code);
+      paramIdx++;
     }
+
+    if (options.owner_id) {
+      conditions.push(`
+        c.spot_id IS NOT NULL
+        AND (
+          ts.created_by = $${paramIdx}
+          OR EXISTS (
+            SELECT 1
+            FROM services s
+            INNER JOIN businesses b ON b.id = s.business_id
+            WHERE s.spot_id = c.spot_id
+              AND s.is_active = TRUE
+              AND b.owner_id = $${paramIdx}
+              AND b.status = 'approved'
+          )
+        )
+      `);
+      values.push(options.owner_id);
+      paramIdx++;
+    }
+
+    if (options.spot_status) {
+      conditions.push(`(c.spot_id IS NULL OR ts.status = $${paramIdx++})`);
+      values.push(options.spot_status);
+    }
+
+    const sql = `
+      SELECT c.*
+      FROM capacity_alert_configs c
+      LEFT JOIN tourism_spots ts ON ts.id = c.spot_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY c.updated_at DESC, c.id DESC
+    `;
+
     const { rows } = await query(sql, values);
     return rows;
   }

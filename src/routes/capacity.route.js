@@ -29,7 +29,7 @@ router.get('/stream', CapacityController.streamCapacity); // SSE — no auth for
 // ROUTE: GET /admin - Danh sách sức chứa phân trang và phân quyền quản trị. Xử lý bởi CapacityController.getAdminAll.
 router.get('/admin', authenticateToken, checkPermission('capacity', 'read'), validateQuery(adminCapacityQuerySchema), CapacityController.getAdminAll);
 // ROUTE: GET /spots/:spotId/history - Truy vấn sức chứa và mật độ khách. Xử lý bởi CapacityController.getHistory. Truy cập: yêu cầu đăng nhập.
-router.get('/spots/:spotId/history', authenticateToken, validateParams(spotIdParamSchema), validateQuery(historyQuerySchema), CapacityController.getHistory);
+router.get('/spots/:spotId/history', authenticateToken, checkPermission('capacity', 'read'), validateParams(spotIdParamSchema), validateQuery(historyQuerySchema), CapacityController.getHistory);
 // ROUTE: GET /spots/:spotId/stats - Lấy số liệu thống kê sức chứa và mật độ khách. Xử lý bởi CapacityController.getStats. Truy cập: yêu cầu đăng nhập, cần quyền capacity:read.
 router.get('/spots/:spotId/stats', authenticateToken, checkPermission('capacity', 'read'), validateParams(spotIdParamSchema), validateQuery(statsQuerySchema), CapacityController.getStats);
 
@@ -42,7 +42,7 @@ router.get('/spots/:spotId/alternatives', validateParams(spotIdParamSchema), val
 router.post('/spots/:spotId/log', authenticateToken, checkPermission('capacity', 'create'), validateParams(spotIdParamSchema), validateBody(logCapacitySchema), CapacityController.logCapacity );
 
 // ROUTE: PATCH /spots/:spotId/settings - Cấu hình sức chứa tối đa. Xử lý bởi CapacityController.updateSpotSettings. Truy cập: yêu cầu đăng nhập, cần quyền capacity:create.
-router.patch('/spots/:spotId/settings', authenticateToken, checkPermission('capacity', 'create'), validateParams(spotIdParamSchema), validateBody(spotCapacitySettingsSchema), CapacityController.updateSpotSettings);
+router.patch('/spots/:spotId/settings', authenticateToken, checkPermission('capacity', 'update'), validateParams(spotIdParamSchema), validateBody(spotCapacitySettingsSchema), CapacityController.updateSpotSettings);
 
 // Admin — cấu hình cảnh báo
 // ROUTE: GET /configs - Truy vấn sức chứa và mật độ khách. Xử lý bởi CapacityController.getAlertConfigs. Truy cập: yêu cầu đăng nhập, cần quyền capacity:read.

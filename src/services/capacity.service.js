@@ -1,5 +1,5 @@
 const CapacityRepository = require('../models/repositories/capacity.repository');
-const { Api404Error, Api400Error } = require('../core/error.response');
+const { Api404Error, Api400Error, Api403Error } = require('../core/error.response');
 const { formatPagination } = require('../utils/responseFormatter');
 const { cacheOrFetch, invalidateByPrefix } = require('../utils/cache.utils');
 const { notifyChannel } = require('../realtime/websocket.server');
@@ -8,8 +8,10 @@ const FKValidator = require('../utils/fk-validator');
 
 // Các role được bypass ownership check (quản lý nội dung toàn hệ thống)
 const GLOBAL_SPOT_ROLES = new Set(['system_admin', 'ministry_manager']);
+const GLOBAL_WRITE_ROLES = new Set(['system_admin']);
 const DEPARTMENT_SPOT_ROLES = new Set(['department_manager']);
 const OWNER_SPOT_ROLES = new Set(['spot_operator', 'travel_company', 'service_provider']);
+const DEFAULT_DEPARTMENT_PROVINCE_CODE = '37';
 
 // SSE clients registry
 const sseClients = new Set();
@@ -41,6 +43,7 @@ class CapacityService {
       effectiveOptions.status || 'all',
       effectiveOptions.province_code || 'all',
       effectiveOptions.created_by || 'any',
+      effectiveOptions.owner_id || 'any',
       effectiveOptions.spot_status || 'all',
     ].join(':');
 
@@ -135,7 +138,8 @@ class CapacityService {
     }, 30);
   }
 
-  async getHistory(spotId, options = {}) {
+  async getHistory(spotId, options = {}, viewer = {}) {
+    await this._ensureSpotAccess(spotId, viewer?.user, { write: false });
     const page = Math.max(1, parseInt(options.page, 10) || 1);
     const limit = Math.min(500, Math.max(1, parseInt(options.limit, 10) || 100));
     const { logs, totalCount } = await CapacityRepository.getHistory(spotId, { ...options, page, limit });
@@ -143,13 +147,15 @@ class CapacityService {
     return { logs: result.data, pagination: result.pagination };
   }
 
-  async getStats(spotId, options = {}) {
+  async getStats(spotId, options = {}, viewer = {}) {
+    await this._ensureSpotAccess(spotId, viewer?.user, { write: false });
     return CapacityRepository.getStats(spotId, options);
   }
 
-  async logCapacity(data) {
+  async logCapacity(data, viewer = {}) {
     // Kiểm tra spot_id tồn tại trước khi ghi log
     await FKValidator.spot(data.spot_id);
+    await this._ensureSpotAccess(data.spot_id, viewer?.user, { write: true });
 
     const log = await CapacityRepository.logCapacity(data);
 
@@ -246,21 +252,24 @@ class CapacityService {
     return alternatives;
   }
 
-  async getAlertConfigs(options = {}) {
-    return CapacityRepository.getAlertConfigs(options);
+  async getAlertConfigs(options = {}, viewer = {}) {
+    const effectiveOptions = await this._applyAlertConfigScope(options, viewer?.user, { write: false });
+    return CapacityRepository.getAlertConfigs(effectiveOptions);
   }
 
-  async upsertAlertConfig(data) {
+  async upsertAlertConfig(data, viewer = {}) {
     // Kiểm tra spot_id nếu cấu hình alert cho một spot cụ thể
     await FKValidator.all([
       FKValidator.spot(data.spot_id),
       FKValidator.province(data.province_code),
     ]);
+    await this._applyAlertConfigScope(data, viewer?.user, { write: true });
     return CapacityRepository.upsertAlertConfig(data);
   }
 
-  async updateSpotSettings(spotId, data) {
+  async updateSpotSettings(spotId, data, viewer = {}) {
     await FKValidator.spot(spotId);
+    await this._ensureSpotAccess(spotId, viewer?.user, { write: true });
     
     const { query: dbQuery } = require('../configs/database');
     
@@ -330,6 +339,86 @@ class CapacityService {
     return sseClients.size;
   }
 
+  async _ensureSpotAccess(spotId, user, { write = false } = {}) {
+    const spot = await CapacityRepository.getSpotAccessInfo(spotId);
+    if (!spot) {
+      throw new Api404Error('Khong tim thay diem du lich');
+    }
+
+    const roleCode = this._roleCode(user);
+    const userId = user?.id;
+
+    if (write && GLOBAL_WRITE_ROLES.has(roleCode)) return spot;
+    if (!write && GLOBAL_SPOT_ROLES.has(roleCode)) return spot;
+
+    if (roleCode === 'ministry_manager') {
+      if (write) {
+        throw new Api403Error('Bo chi duoc xem/giam sat du lieu suc chua');
+      }
+      return spot;
+    }
+
+    if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
+      const provinceCode = this._resolveProvinceCode(user);
+      if (!provinceCode) {
+        throw new Api400Error('Can province_code trong ho so tai khoan So de gioi han du lieu theo tinh');
+      }
+      if (String(spot.province_code || '') === String(provinceCode)) return spot;
+      throw new Api403Error('So chi duoc thao tac du lieu trong tinh cua minh');
+    }
+
+    if (OWNER_SPOT_ROLES.has(roleCode)) {
+      if (spot.created_by && String(spot.created_by) === String(userId)) return spot;
+
+      const ownsThroughBusiness = await CapacityRepository.userOwnsSpotThroughBusiness(userId, spotId);
+      if (ownsThroughBusiness) return spot;
+
+      throw new Api403Error('Doanh nghiep chi duoc thao tac diem minh van hanh hoac dich vu co lien ket');
+    }
+
+    throw new Api403Error('Ban khong co quyen thao tac du lieu suc chua');
+  }
+
+  async _applyAlertConfigScope(options = {}, user, { write = false } = {}) {
+    const roleCode = this._roleCode(user);
+    const scoped = { ...options };
+
+    if (write && GLOBAL_WRITE_ROLES.has(roleCode)) return scoped;
+    if (!write && GLOBAL_SPOT_ROLES.has(roleCode)) return scoped;
+
+    if (roleCode === 'ministry_manager') {
+      if (write) {
+        throw new Api403Error('Bo chi duoc xem cau hinh canh bao suc chua');
+      }
+      return scoped;
+    }
+
+    if (scoped.spot_id) {
+      await this._ensureSpotAccess(scoped.spot_id, user, { write });
+      return scoped;
+    }
+
+    if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
+      const provinceCode = this._resolveProvinceCode(user, scoped);
+      if (!provinceCode) {
+        throw new Api400Error('Can province_code de gioi han cau hinh canh bao cua So');
+      }
+      scoped.province_code = provinceCode;
+      return scoped;
+    }
+
+    if (OWNER_SPOT_ROLES.has(roleCode)) {
+      if (write) {
+        throw new Api400Error('Doanh nghiep can chon spot_id cu the de cau hinh canh bao');
+      }
+      scoped.owner_id = user?.id;
+      return scoped;
+    }
+
+    scoped.spot_status = 'active';
+    return scoped;
+  }
+
   _applyListScope(options = {}, user) {
     const roleCode = this._roleCode(user);
     const scoped = { ...options };
@@ -348,7 +437,7 @@ class CapacityService {
     }
 
     if (OWNER_SPOT_ROLES.has(roleCode)) {
-      scoped.created_by = user?.id;
+      scoped.owner_id = user?.id;
       return scoped;
     }
 

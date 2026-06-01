@@ -15,6 +15,7 @@ class User {
         this.date_of_birth = data.date_of_birth;
         this.gender = data.gender;
         this.nationality = data.nationality;
+        this.province_code = data.province_code;
         this.preferred_language = data.preferred_language;
         this.preferred_currency = data.preferred_currency;
         this.preferred_distance = data.preferred_distance;
@@ -51,6 +52,7 @@ class User {
             date_of_birth: this.date_of_birth,
             gender: this.gender,
             nationality: this.nationality,
+            province_code: this.province_code,
             preferred_language: this.preferred_language,
             preferred_currency: this.preferred_currency,
             preferred_distance: this.preferred_distance,
@@ -129,6 +131,7 @@ class User {
         if (data.date_of_birth !== undefined) prepared.date_of_birth = data.date_of_birth;
         if (data.gender !== undefined) prepared.gender = data.gender?.trim() || null;
         if (data.nationality !== undefined) prepared.nationality = data.nationality?.trim() || null;
+        if (data.province_code !== undefined) prepared.province_code = data.province_code?.trim() || null;
         if (data.preferred_language !== undefined) prepared.preferred_language = data.preferred_language;
         if (data.preferred_currency !== undefined) prepared.preferred_currency = data.preferred_currency;
         if (data.preferred_distance !== undefined) prepared.preferred_distance = data.preferred_distance;
