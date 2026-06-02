@@ -92,11 +92,21 @@ class GovernanceRepository {
      */
     static async getConservationMonitoring({ provinceId = null, days = 30 }) {
         try {
+            const tableCheck = await query(`
+      SELECT
+        to_regclass('public.conservation_areas') AS conservation_areas,
+        to_regclass('public.satellite_analysis') AS satellite_analysis
+    `);
+
+            if (!tableCheck.rows[0]?.conservation_areas || !tableCheck.rows[0]?.satellite_analysis) {
+                return [];
+            }
+
             const sql = `
       SELECT
         ca.id AS conservation_id,
         ca.name_vi AS conservation_name,
-        p.name_vi AS province_name,
+        p.name AS province_name,
         COUNT(sa.id) FILTER (WHERE sa.change_detected = TRUE) AS detected_changes,
         COALESCE(SUM(sa.change_area_ha) FILTER (WHERE sa.change_detected = TRUE), 0) AS total_change_area_ha,
         MAX(sa.analyzed_at) AS latest_analyzed_at
@@ -106,7 +116,7 @@ class GovernanceRepository {
         ON sa.conservation_id = ca.id
        AND sa.analyzed_at >= NOW() - ($1::text || ' days')::interval
       WHERE ($2::text IS NULL OR ca.province_code = $2)
-      GROUP BY ca.id, ca.name_vi, p.name_vi
+      GROUP BY ca.id, ca.name_vi, p.name
       ORDER BY detected_changes DESC, latest_analyzed_at DESC NULLS LAST
     `;
 
@@ -836,13 +846,34 @@ class GovernanceRepository {
       LIMIT 10
     `;
 
-        const [visitsRes, sourceRes, auditRes] = await Promise.all([
+        const totalsSql = `
+      SELECT
+        COUNT(*) AS total_visits,
+        COUNT(DISTINCT user_id) AS unique_visitors
+      FROM user_visit_history
+      WHERE visited_at >= NOW() - ($1::text || ' days')::interval
+    `;
+
+        const [visitsRes, sourceRes, auditRes, totalsRes] = await Promise.all([
             query(visitsSql, [String(days)]),
             query(sourceSql, [String(days)]),
             query(auditSql, [String(days)]),
+            query(totalsSql, [String(days)]),
         ]);
 
+        const timeline = visitsRes.rows.map((row) => ({
+            period: row.period,
+            visits: Number(row.visit_count || 0),
+            unique_visitors: Number(row.unique_users || 0),
+        }));
+        const totals = totalsRes.rows[0] || {};
+
         return {
+            total_visits: Number(totals.total_visits || 0),
+            unique_visitors: Number(totals.unique_visitors || 0),
+            avg_duration_seconds: null,
+            bounce_rate_pct: null,
+            timeline,
             time_series: visitsRes.rows,
             top_sources: sourceRes.rows,
             top_actions: auditRes.rows,
