@@ -83,6 +83,11 @@ class GovernanceService {
 
     static resolvePeriodRange(period = 'month', year = new Date().getFullYear()) {
         const y = Number(year);
+        const formatDate = (date) => {
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${date.getFullYear()}-${month}-${day}`;
+        };
 
         if (period === 'year') {
             return {
@@ -97,8 +102,8 @@ class GovernanceService {
             const start = new Date(y, startMonth, 1);
             const end = new Date(y, startMonth + 3, 0);
             return {
-                dateFrom: start.toISOString().slice(0, 10),
-                dateTo: end.toISOString().slice(0, 10),
+                dateFrom: formatDate(start),
+                dateTo: formatDate(end),
             };
         }
 
@@ -107,8 +112,8 @@ class GovernanceService {
         const end = new Date(y, month + 1, 0);
 
         return {
-            dateFrom: start.toISOString().slice(0, 10),
-            dateTo: end.toISOString().slice(0, 10),
+            dateFrom: formatDate(start),
+            dateTo: formatDate(end),
         };
     }
 
