@@ -10,6 +10,7 @@
     "dev:cluster": "nodemon cluster.js",
     "db:grant-enterprise-governance-permissions": "node scripts/apply-sql-file.js migrations/20260602_grant_enterprise_governance_permissions.sql",
     "db:seed-real-dashboard-data": "node scripts/seed_real_dashboard_data.js",
+    "db:clear-dashboard-data": "node scripts/clear_dashboard_data.js",
     "db:grant-capacity-read:travel-company": "node scripts/apply-sql-file.js migrations/20260602_grant_travel_company_capacity_read.sql",
     "db:normalize-capacity-roles": "node scripts/apply-sql-file.js migrations/20260602_normalize_capacity_role_permissions.sql",
     "db:normalize-spots-province-37": "node scripts/apply-sql-file.js migrations/20260602_normalize_spots_province_37.sql",

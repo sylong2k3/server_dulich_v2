@@ -68,6 +68,95 @@ function slugToSearchText(slug) {
     .replace(/-/g, ' ');
 }
 
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/-/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toSlugSearchText(value) {
+  return normalizeSearchText(value).replace(/\s+/g, '-');
+}
+
+const SERVICE_CATEGORY_KEYWORDS = new Set([
+  'san bay',
+  'ngan hang',
+  'ben xe',
+  'rap chieu phim',
+  'cau lac bo',
+  'pha',
+  'cang ben cang',
+  'benh vien',
+  'khach san',
+  'khu nghi duong',
+  'nha hang',
+  'cang bien',
+  'buu dien',
+  'cua hang luu niem',
+  'trung tam the thao',
+  'san van dong',
+  'sieu thi',
+  'ga tau',
+  'cong ty du lich',
+  'cua khau',
+  'thap vien thong',
+  'dai su quan lanh su quan',
+  'khu cong nghiep',
+  'khu dan cu',
+  'truong hoc',
+]);
+
+function serviceCategoryKey(row) {
+  return normalizeSearchText(firstValue(row.category_name, row.category));
+}
+
+function isServiceCategory(row) {
+  return SERVICE_CATEGORY_KEYWORDS.has(serviceCategoryKey(row));
+}
+
+function keywordRequestsServiceCategory(keyword) {
+  const q = normalizeSearchText(keyword);
+  if (!q) return false;
+  return Array.from(SERVICE_CATEGORY_KEYWORDS).some((cat) => q.includes(cat) || cat.includes(q));
+}
+
+function spotMatchScore(row, keyword) {
+  const q = normalizeSearchText(keyword);
+  if (!q) return 0;
+
+  const name = normalizeSearchText(firstValue(row.name_vi, row.name, row.title, row.name_en));
+  const slug = normalizeSearchText(String(row.slug || '').replace(/-/g, ' '));
+  const haystack = `${name} ${slug}`;
+  const tokens = q.split(' ').filter(Boolean);
+
+  if (name === q || slug === q) return 100;
+  if (slug.startsWith(q) || name.startsWith(q)) return 90;
+  if (slug.includes(q) || name.includes(q)) return 80;
+  if (tokens.length && tokens.every((token) => haystack.includes(token))) return 60 + tokens.length;
+  return tokens.filter((token) => haystack.includes(token)).length * 10;
+}
+
+function rankAndFilterSpotRows(rows, keyword, categoryId) {
+  const allowServiceCategories = !!categoryId || keywordRequestsServiceCategory(keyword);
+  const scopedRows = allowServiceCategories ? rows : rows.filter((row) => !isServiceCategory(row));
+
+  return scopedRows
+    .map((row, index) => ({ row, index, score: spotMatchScore(row, keyword) }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const ratingDiff = Number(b.row.rating_avg || 0) - Number(a.row.rating_avg || 0);
+      if (ratingDiff !== 0) return ratingDiff;
+      return a.index - b.index;
+    })
+    .map(({ row }) => row);
+}
+
 /** Tính bounds [[minLng,minLat],[maxLng,maxLat]] từ list rows có toạ độ. */
 function computeBounds(rows = []) {
   const points = rows.map(pickLngLat).filter(Boolean);
@@ -169,14 +258,15 @@ async function findSpotDetail({ id, slug }) {
     for (const search of searchTerms) {
       const { spots = [] } = await SpotService.getAllSpots({
         page: 1,
-        limit: 5,
+        limit: 20,
         search,
         sortBy: 'rating_avg',
         sortOrder: 'DESC',
       });
-      const candidate = spots.find(s => s.slug === normalizedSlug)
-        || spots.find(s => String(s.slug || '').includes(normalizedSlug))
-        || spots[0];
+      const ranked = rankAndFilterSpotRows(spots, search);
+      const candidate = ranked.find(s => s.slug === normalizedSlug)
+        || ranked.find(s => String(s.slug || '').includes(normalizedSlug))
+        || ranked[0];
       if (candidate?.id) {
         return SpotService.getSpotById(candidate.id);
       }
@@ -493,18 +583,31 @@ const HANDLERS = {
           .includes(kw));
       }
     } else {
-      const { spots } = await SpotService.getAllSpots({
-        page: 1,
-        limit,
-        search: keyword,
-        category_id: category_id,
-        province_code,
-        rating_min,
-        is_featured,
-        sortBy: 'rating_avg',
-        sortOrder: 'DESC',
-      });
-      rows = spots;
+      const fetchLimit = Math.max(limit * 3, 20);
+      const searchTerms = keyword
+        ? [...new Set([keyword, toSlugSearchText(keyword)].filter(Boolean))]
+        : [keyword];
+      const rowsById = new Map();
+
+      for (const search of searchTerms) {
+        const { spots } = await SpotService.getAllSpots({
+          page: 1,
+          limit: fetchLimit,
+          search,
+          category_id: category_id,
+          province_code,
+          rating_min,
+          is_featured,
+          sortBy: 'rating_avg',
+          sortOrder: 'DESC',
+        });
+        for (const spot of spots) {
+          if (spot?.id && !rowsById.has(spot.id)) rowsById.set(spot.id, spot);
+        }
+      }
+
+      rows = Array.from(rowsById.values());
+      rows = rankAndFilterSpotRows(rows, keyword, category_id);
     }
 
     const items = rows.slice(0, limit).map(trimSpot);

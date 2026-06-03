@@ -110,9 +110,10 @@ class GovernanceService {
             };
         }
 
-        const month = new Date().getMonth();
-        const start = new Date(y, month, 1);
-        const end = new Date(y, month + 1, 0);
+        const currentYear = new Date().getFullYear();
+        const targetMonth = y === currentYear ? new Date().getMonth() : 11;
+        const start = new Date(y, 0, 1);
+        const end = new Date(y, targetMonth + 1, 0);
 
         return {
             dateFrom: formatDate(start),
