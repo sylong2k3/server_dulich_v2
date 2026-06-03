@@ -6,6 +6,14 @@ const TokenManager = require("../utils/tokenManager");
 const asyncHandler = require("../helpers/async-handler");
 const RefreshTokenRepository = require("../models/repositories/refresh-token.repository");
 const { parseDurationToMs } = require("../utils/jwt");
+const ChatbotService = require("../services/chatbot.service");
+
+async function getUserChatSessions(userId) {
+  if (!userId) {
+    return { items: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } };
+  }
+  return ChatbotService.listSessions({ userId }, { page: 1, limit: 20 });
+}
 
 class AuthController {
   // ─── Đăng ký ────────────────────────────────────────────────────────────────
@@ -20,6 +28,7 @@ class AuthController {
       tokenType: tokens.tokenType,
       expiresIn: tokens.expiresIn,
       refreshExpiresIn: tokens.refreshExpiresIn,
+      chatSessions: await getUserChatSessions(user.id),
     });
   });
 
@@ -44,6 +53,7 @@ class AuthController {
       tokenType: result.tokens.tokenType,
       expiresIn: result.tokens.expiresIn,
       refreshExpiresIn: result.tokens.refreshExpiresIn,
+      chatSessions: await getUserChatSessions(result.user.id),
     });
   });
 
@@ -166,6 +176,7 @@ class AuthController {
       tokenType: tokens.tokenType,
       expiresIn: tokens.expiresIn,
       refreshExpiresIn: tokens.refreshExpiresIn,
+      chatSessions: await getUserChatSessions(user.id),
     });
   });
 }
