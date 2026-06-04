@@ -54,7 +54,7 @@ class TourService {
         const page = Math.max(1, parseInt(query.page) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 20));
         const lang = normalizeLang(query.lang);
-        const effectiveQuery = this._applyListScope({ ...query, page, limit, lang }, viewer?.user);
+        const effectiveQuery = await this._applyListScope({ ...query, page, limit, lang }, viewer?.user);
         const { rows, total } = await TourRepository.findAll(effectiveQuery);
         const result = formatPagination(rows.map(({ total_count, ...r }) => r), total, page, limit);
         return { tours: result.data, pagination: result.pagination };
@@ -76,7 +76,7 @@ class TourService {
         const lang = normalizeLang(query.lang);
         const tour = await TourRepository.findById(id, lang);
         if (!tour) throw new Api404Error('Không tìm thấy tour');
-        this._assertCanView(tour, viewer?.user);
+        await this._assertCanView(tour, viewer?.user);
         return tour;
     }
 
@@ -92,6 +92,8 @@ class TourService {
     }
 
     async create(data, user) {
+        await this._assertCanMutate(data, user);
+
         await FKValidator.all([
             FKValidator.business(data.business_id, 'approved'),
             FKValidator.province(data.province_code),
@@ -117,6 +119,7 @@ class TourService {
         if (!existing) throw new Api404Error('Không tìm thấy tour');
 
         await this._checkOwnerOrAdmin(existing, user);
+        await this._assertCanMutate(data, user, { allowMissingBusinessId: true });
 
         await FKValidator.all([
             FKValidator.business(data.business_id, 'approved'),
@@ -222,9 +225,9 @@ class TourService {
 
     // ==================== HELPERS ====================
 
-    static #BYPASS_ROLES = new Set(['system_admin', 'department_manager']);
+    static #BYPASS_ROLES = new Set(['system_admin', 'ministry_manager', 'department_manager']);
 
-    _checkOwnerOrAdmin(tour, user) {
+    async _checkOwnerOrAdmin(tour, user) {
         const roleCode = String(user?.role?.code || '').toLowerCase();
 
         if (TourService.#BYPASS_ROLES.has(roleCode)) return;
@@ -233,11 +236,12 @@ class TourService {
             throw new Api403Error('Tour không gắn với doanh nghiệp — không thể xác định quyền sở hữu');
         }
 
-        if (!user?.business_id) {
+        const businessIds = await this._getOwnedBusinessIds(user);
+        if (!businessIds.length) {
             throw new Api403Error('Tài khoản của bạn chưa liên kết với doanh nghiệp');
         }
 
-        if (tour.business_id !== user.business_id) {
+        if (!businessIds.includes(tour.business_id)) {
             throw new Api403Error('Bạn không có quyền chỉnh sửa tour của doanh nghiệp khác');
         }
     }
@@ -254,7 +258,7 @@ class TourService {
 
     // ==================== RBAC SCOPING ====================
 
-    _applyListScope(options = {}, user) {
+    async _applyListScope(options = {}, user) {
         const roleCode = this._roleCode(user);
         const scoped = { ...options };
 
@@ -270,7 +274,11 @@ class TourService {
 
         // travel_company / service_provider — chỉ thấy tour của doanh nghiệp mình
         if (OWNER_ROLES.has(roleCode)) {
-            scoped.business_id = user?.business_id;
+            const businessIds = await this._getOwnedBusinessIds(user);
+            if (!businessIds.length) {
+                throw new Api403Error('Tài khoản của bạn chưa liên kết với doanh nghiệp');
+            }
+            scoped.business_ids = businessIds;
             return scoped;
         }
 
@@ -279,7 +287,7 @@ class TourService {
         return scoped;
     }
 
-    _assertCanView(tour, user) {
+    async _assertCanView(tour, user) {
         const roleCode = this._roleCode(user);
         if (GLOBAL_ROLES.has(roleCode)) return;
         if (DEPARTMENT_ROLES.has(roleCode)) {
@@ -290,11 +298,49 @@ class TourService {
             return;
         }
         if (OWNER_ROLES.has(roleCode)) {
-            if (tour.business_id && tour.business_id !== user?.business_id) {
+            const businessIds = await this._getOwnedBusinessIds(user);
+            if (tour.business_id && !businessIds.includes(tour.business_id)) {
                 throw new Api403Error('Bạn không có quyền xem tour của doanh nghiệp khác');
             }
             return;
         }
+    }
+
+    async _assertCanMutate(data = {}, user, { allowMissingBusinessId = false } = {}) {
+        const roleCode = this._roleCode(user);
+        if (GLOBAL_ROLES.has(roleCode) || DEPARTMENT_ROLES.has(roleCode)) return;
+
+        if (data.business_id === undefined && allowMissingBusinessId) return;
+
+        const businessIds = await this._getOwnedBusinessIds(user);
+        if (!businessIds.length) {
+            throw new Api403Error('Tài khoản của bạn chưa liên kết với doanh nghiệp');
+        }
+
+        if (!data.business_id) {
+            // Auto-assign nếu có duy nhất 1 business approved
+            const BusinessRepository = require('../models/repositories/business.repository');
+            const businesses = await BusinessRepository.findByOwnerId(user?.id);
+            const approvedBusinesses = businesses.filter((b) => b.status === 'approved');
+            if (approvedBusinesses.length === 1) {
+                data.business_id = approvedBusinesses[0].id;
+            } else {
+                throw new Api400Error('Tour bắt buộc phải có doanh nghiệp (business_id)');
+            }
+        }
+
+        if (data.business_id) {
+            if (!businessIds.includes(data.business_id)) {
+                throw new Api403Error('Bạn không có quyền sử dụng doanh nghiệp này cho tour');
+            }
+        }
+    }
+
+    async _getOwnedBusinessIds(user) {
+        if (!user?.id) return [];
+        const BusinessRepository = require('../models/repositories/business.repository');
+        const businesses = await BusinessRepository.findByOwnerId(user.id);
+        return businesses.map((business) => business.id);
     }
 
     _roleCode(user) {

@@ -9,7 +9,7 @@ const { normalizeLang } = require('../utils/i18n.utils');
 const QRCode = require('qrcode');
 
 // Các role được bypass ownership check (quản lý nội dung toàn hệ thống)
-const BYPASS_ROLES = new Set(['system_admin', 'department_manager']);
+const BYPASS_ROLES = new Set(['system_admin', 'ministry_manager', 'department_manager']);
 const GLOBAL_SPOT_ROLES = new Set(['system_admin', 'ministry_manager']);
 const DEPARTMENT_SPOT_ROLES = new Set(['department_manager']);
 const OWNER_SPOT_ROLES = new Set(['spot_operator', 'travel_company', 'service_provider']);

@@ -11,7 +11,7 @@ const { ocopQuerySchema, ocopAdminQuerySchema, createOcopSchema, updateOcopSchem
 router.get(
   '/admin',
   authenticateToken,
-  requireRole(['system_admin', 'ministry_manager', 'department_manager']),
+  requireRole(['system_admin', 'ministry_manager', 'department_manager', 'travel_company', 'service_provider', 'spot_operator']),
   checkPermission('ocop', 'read'),
   validateQuery(ocopAdminQuerySchema),
   OcopController.getAdminAll
@@ -20,7 +20,7 @@ router.get(
 router.get(
   '/admin/:id',
   authenticateToken,
-  requireRole(['system_admin', 'ministry_manager', 'department_manager']),
+  requireRole(['system_admin', 'ministry_manager', 'department_manager', 'travel_company', 'service_provider', 'spot_operator']),
   checkPermission('ocop', 'read'),
   validateParams(uuidParamSchema),
   OcopController.getAdminById

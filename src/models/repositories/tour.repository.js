@@ -5,7 +5,7 @@ const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/
 class TourRepository {
   // ==================== TOUR PACKAGES ====================
 
-  static async findAll({ page = 1, limit = 10, search, status, province_code, is_featured, business_id, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
+  static async findAll({ page = 1, limit = 10, search, status, province_code, is_featured, business_id, business_ids, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
     const lang = normalizeLang(rawLang);
     const offset = (page - 1) * limit;
     const params = [];
@@ -16,6 +16,10 @@ class TourRepository {
     if (province_code) { conditions.push(`tp.province_code = $${idx++}`); params.push(province_code); }
     if (is_featured !== undefined) { conditions.push(`tp.is_featured = $${idx++}`); params.push(is_featured); }
     if (business_id) { conditions.push(`tp.business_id = $${idx++}`); params.push(business_id); }
+    if (Array.isArray(business_ids) && business_ids.length) {
+      conditions.push(`tp.business_id = ANY($${idx++}::uuid[])`);
+      params.push(business_ids);
+    }
     if (search) {
       conditions.push(`(tp.name_vi ILIKE $${idx} OR tp.name_en ILIKE $${idx} OR tp.description_vi ILIKE $${idx})`);
       params.push(`%${search}%`);

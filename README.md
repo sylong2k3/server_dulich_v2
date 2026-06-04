@@ -541,6 +541,12 @@ Các Action được thiết kế và hỗ trợ bao gồm:
 
 ---
 
+## 🛡️ Phân quyền Admin theo Role
+
+Xem tài liệu riêng: [README_ROLE_PERMISSIONS.md](./README_ROLE_PERMISSIONS.md).
+
+---
+
 ## API Tải Tuyến Du Lịch
 
 ### `GET /api/v1/capacity/tours/:tourId/current`

@@ -2,7 +2,7 @@ const db = require('../../configs/database');
 const { normalizeLang, localizedSQL, localizedValueSQL } = require('../../utils/i18n.utils');
 
 class OcopRepository {
-    static async findAll({ page = 1, limit = 12, search, category, star_rating, province_code, business_id, spot_id, by_distance, radius_km, is_active, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
+    static async findAll({ page = 1, limit = 12, search, category, star_rating, province_code, business_id, business_ids, spot_id, spot_ids, by_distance, radius_km, is_active, sortBy = 'created_at', sortOrder = 'DESC', lang: rawLang = 'vi' }) {
         const lang = normalizeLang(rawLang);
         const offset = (page - 1) * limit;
         const params = [];
@@ -14,6 +14,19 @@ class OcopRepository {
         if (star_rating) { conditions.push(`o.star_rating = $${idx++}`); params.push(star_rating); }
         if (province_code) { conditions.push(`o.province_code = $${idx++}`); params.push(province_code); }
         if (business_id) { conditions.push(`o.business_id = $${idx++}`); params.push(business_id); }
+        if (Array.isArray(business_ids) && business_ids.length && Array.isArray(spot_ids) && spot_ids.length) {
+            conditions.push(`(o.business_id = ANY($${idx++}::uuid[]) OR o.spot_id = ANY($${idx++}::uuid[]))`);
+            params.push(business_ids, spot_ids);
+        } else {
+            if (Array.isArray(business_ids) && business_ids.length) {
+                conditions.push(`o.business_id = ANY($${idx++}::uuid[])`);
+                params.push(business_ids);
+            }
+            if (Array.isArray(spot_ids) && spot_ids.length) {
+                conditions.push(`o.spot_id = ANY($${idx++}::uuid[])`);
+                params.push(spot_ids);
+            }
+        }
         if (spot_id) {
             if (by_distance) {
                 const rad = parseFloat(radius_km) || 10;

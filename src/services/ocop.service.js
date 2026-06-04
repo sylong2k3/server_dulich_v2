@@ -1,8 +1,10 @@
 const OcopRepository = require('../models/repositories/ocop.repository');
-const { Api404Error } = require('../core/error.response');
+const BusinessRepository = require('../models/repositories/business.repository');
+const { Api404Error, Api400Error, Api403Error } = require('../core/error.response');
 const FKValidator = require('../utils/fk-validator');
 const { cacheOrFetch, invalidateByPrefix } = require('../utils/cache.utils');
 const { normalizeLang } = require('../utils/i18n.utils');
+const db = require('../configs/database');
 
 const OCOP_CACHE_TTL = 60;
 
@@ -51,7 +53,7 @@ class OcopService {
   static async getAdminAll(query, viewer = {}) {
     const { page = 1, limit = 20, search, category, star_rating, province_code, spot_id, by_distance, radius_km, is_active, sortBy, sortOrder, lang: rawLang } = query;
     const lang = normalizeLang(rawLang);
-    const effectiveQuery = OcopService._applyListScope({
+    const effectiveQuery = await OcopService._applyListScope({
       page, limit, search, category, star_rating, province_code, spot_id, by_distance, radius_km, is_active, sortBy, sortOrder, lang,
     }, viewer?.user);
     const { rows, total } = await OcopRepository.findAll(effectiveQuery);
@@ -79,17 +81,23 @@ class OcopService {
     const lang = normalizeLang(query.lang);
     const item = await OcopRepository.findById(id, lang);
     if (!item) throw new Api404Error('Không tìm thấy sản phẩm OCOP');
-    OcopService._assertCanView(item, viewer?.user);
+    await OcopService._assertCanView(item, viewer?.user);
     return item;
   }
 
   static async getMy(query, user) {
-    if (!user?.business_id) throw new (require('../core/error.response').Api400Error)('Tài khoản chưa liên kết doanh nghiệp');
+    const businessIds = await OcopService._getOwnedBusinessIds(user);
+    const spotIds = await OcopService._getOwnedSpotIds(user);
+    if (!businessIds.length && !spotIds.length) {
+      throw new Api403Error('Tài khoản chưa liên kết doanh nghiệp hoặc điểm du lịch');
+    }
+
     const { page = 1, limit = 12, search, category, star_rating, sortBy, sortOrder, lang: rawLang } = query;
     const lang = normalizeLang(rawLang);
     const { rows, total } = await OcopRepository.findAll({
       page, limit, search, category, star_rating,
-      business_id: user.business_id,
+      business_ids: businessIds,
+      spot_ids: spotIds,
       sortBy, sortOrder, lang,
     });
     return {
@@ -99,10 +107,8 @@ class OcopService {
   }
 
   static async create(data, user) {
-    // Nếu là owner role, tự động gán business_id của user
-    if (user && !data.business_id && user.business_id) {
-      data.business_id = user.business_id;
-    }
+    await OcopService._assertCanUseBusinessForMutation(data, user);
+
     await FKValidator.all([
       FKValidator.business(data.business_id, 'approved'),
       FKValidator.province(data.province_code),
@@ -117,7 +123,8 @@ class OcopService {
     const existing = await OcopRepository.findById(id);
     if (!existing) throw new Api404Error('Không tìm thấy sản phẩm OCOP');
 
-    OcopService._assertOwnerOrAdmin(existing, user);
+    await OcopService._assertOwnerOrAdmin(existing, user);
+    await OcopService._assertCanUseBusinessForMutation(data, user, { allowMissingBusinessId: true });
 
     await FKValidator.all([
       FKValidator.business(data.business_id, 'approved'),
@@ -134,7 +141,7 @@ class OcopService {
   static async delete(id, user) {
     const existing = await OcopRepository.findById(id);
     if (!existing) throw new Api404Error('Không tìm thấy sản phẩm OCOP');
-    OcopService._assertOwnerOrAdmin(existing, user);
+    await OcopService._assertOwnerOrAdmin(existing, user);
     await OcopRepository.delete(id);
     invalidateByPrefix('ocop:');
   }
@@ -153,7 +160,7 @@ class OcopService {
 
   // ==================== RBAC SCOPING ====================
 
-  static _applyListScope(options = {}, user) {
+  static async _applyListScope(options = {}, user) {
     const roleCode = OcopService._roleCode(user);
     const scoped = { ...options };
 
@@ -167,9 +174,15 @@ class OcopService {
       return scoped;
     }
 
-    // travel_company / service_provider / spot_operator — chỉ thấy OCOP của doanh nghiệp mình
+    // travel_company / service_provider / spot_operator — chỉ thấy OCOP của doanh nghiệp mình hoặc điểm du lịch của mình
     if (OWNER_ROLES.has(roleCode)) {
-      scoped.business_id = user?.business_id;
+      const businessIds = await OcopService._getOwnedBusinessIds(user);
+      const spotIds = await OcopService._getOwnedSpotIds(user);
+      if (!businessIds.length && !spotIds.length) {
+        throw new Api403Error('Tài khoản chưa liên kết doanh nghiệp hoặc điểm du lịch');
+      }
+      scoped.business_ids = businessIds;
+      scoped.spot_ids = spotIds;
       return scoped;
     }
 
@@ -178,33 +191,92 @@ class OcopService {
     return scoped;
   }
 
-  static _assertCanView(item, user) {
+  static async _assertCanView(item, user) {
     const roleCode = OcopService._roleCode(user);
     if (GLOBAL_ROLES.has(roleCode)) return;
     if (DEPARTMENT_ROLES.has(roleCode)) {
       const provinceCode = OcopService._resolveProvinceCode(user);
       if (provinceCode && item.province_code !== provinceCode) {
-        throw new (require('../core/error.response').Api403Error)('Sản phẩm OCOP không thuộc tỉnh bạn quản lý');
+        throw new Api403Error('Sản phẩm OCOP không thuộc tỉnh bạn quản lý');
       }
       return;
     }
     if (OWNER_ROLES.has(roleCode)) {
-      if (item.business_id && item.business_id !== user?.business_id) {
-        throw new (require('../core/error.response').Api403Error)('Bạn không có quyền xem sản phẩm OCOP của doanh nghiệp khác');
+      const businessIds = await OcopService._getOwnedBusinessIds(user);
+      const spotIds = await OcopService._getOwnedSpotIds(user);
+      const isOwnerByBusiness = item.business_id && businessIds.includes(item.business_id);
+      const isOwnerBySpot = item.spot_id && spotIds.includes(item.spot_id);
+      if (!isOwnerByBusiness && !isOwnerBySpot) {
+        throw new Api403Error('Bạn không có quyền xem sản phẩm OCOP này');
       }
       return;
     }
   }
 
-  static _assertOwnerOrAdmin(item, user) {
+  static async _assertOwnerOrAdmin(item, user) {
     const roleCode = OcopService._roleCode(user);
     if (GLOBAL_ROLES.has(roleCode) || DEPARTMENT_ROLES.has(roleCode)) return;
-    if (!user?.business_id) {
-      throw new (require('../core/error.response').Api403Error)('Tài khoản chưa liên kết doanh nghiệp');
+
+    const businessIds = await OcopService._getOwnedBusinessIds(user);
+    const spotIds = await OcopService._getOwnedSpotIds(user);
+    if (!businessIds.length && !spotIds.length) {
+      throw new Api403Error('Tài khoản chưa liên kết doanh nghiệp hoặc điểm du lịch');
     }
-    if (item.business_id && item.business_id !== user.business_id) {
-      throw new (require('../core/error.response').Api403Error)('Bạn không có quyền chỉnh sửa sản phẩm OCOP của doanh nghiệp khác');
+
+    const isOwnerByBusiness = item.business_id && businessIds.includes(item.business_id);
+    const isOwnerBySpot = item.spot_id && spotIds.includes(item.spot_id);
+    if (!isOwnerByBusiness && !isOwnerBySpot) {
+      throw new Api403Error('Bạn không có quyền chỉnh sửa sản phẩm OCOP này');
     }
+  }
+
+  static async _assertCanUseBusinessForMutation(data = {}, user, { allowMissingBusinessId = false } = {}) {
+    const roleCode = OcopService._roleCode(user);
+    if (GLOBAL_ROLES.has(roleCode) || DEPARTMENT_ROLES.has(roleCode)) return;
+
+    if (data.business_id === undefined && allowMissingBusinessId) return;
+
+    const businessIds = await OcopService._getOwnedBusinessIds(user);
+    const spotIds = await OcopService._getOwnedSpotIds(user);
+    if (!businessIds.length && !spotIds.length) {
+      throw new Api403Error('Tài khoản chưa liên kết doanh nghiệp hoặc điểm du lịch');
+    }
+
+    if (!data.business_id) {
+      // Auto-assign nếu có duy nhất 1 business approved
+      const businesses = await BusinessRepository.findByOwnerId(user?.id);
+      const approvedBusinesses = businesses.filter((business) => business.status === 'approved');
+      if (approvedBusinesses.length === 1) {
+        data.business_id = approvedBusinesses[0].id;
+      } else {
+        throw new Api400Error('Sản phẩm OCOP bắt buộc phải có doanh nghiệp (business_id)');
+      }
+    }
+
+    // Nếu truyền business_id, kiểm tra xem user có sở hữu business này hay không,
+    // HOẶC nếu user sở hữu spot_id đang được truyền vào OCOP thì họ cũng được phép
+    if (data.business_id) {
+      const isOwnerByBusiness = businessIds.includes(data.business_id);
+      const isOwnerBySpot = data.spot_id && spotIds.includes(data.spot_id);
+      if (!isOwnerByBusiness && !isOwnerBySpot) {
+        throw new Api403Error('Bạn không có quyền sử dụng doanh nghiệp hoặc điểm du lịch này cho sản phẩm OCOP');
+      }
+    }
+  }
+
+  static async _getOwnedBusinessIds(user) {
+    if (!user?.id) return [];
+    const businesses = await BusinessRepository.findByOwnerId(user.id);
+    return businesses.map((business) => business.id);
+  }
+
+  static async _getOwnedSpotIds(user) {
+    if (!user?.id) return [];
+    const { rows } = await db.query(
+      "SELECT id FROM tourism_spots WHERE created_by = $1 AND status != 'deleted'",
+      [user.id]
+    );
+    return rows.map((spot) => spot.id);
   }
 
   static _roleCode(user) {
