@@ -31,7 +31,7 @@ class NotificationRepository {
         END,
         $5,
         $6, $7, $8, $9::jsonb,
-        CASE WHEN $10 = 'sent' THEN NOW() ELSE NULL END,
+        CASE WHEN $10::text = 'sent' THEN NOW() ELSE NULL END,
         $10, $11
       )
       RETURNING *
@@ -80,7 +80,7 @@ class NotificationRepository {
         unnest($1::uuid[]),
         $2::int[],
         $3, $4, $5, $6::jsonb,
-        CASE WHEN $7 = 'sent' THEN NOW() ELSE NULL END,
+        CASE WHEN $7::text = 'sent' THEN NOW() ELSE NULL END,
         $7, $8
       RETURNING id, user_id
     `;

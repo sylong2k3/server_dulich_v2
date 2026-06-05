@@ -337,7 +337,7 @@ class MapAdminRepository {
         published_at
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
-        CASE WHEN $8 = 'published' THEN NOW() ELSE NULL END
+        CASE WHEN $8::text = 'published' THEN NOW() ELSE NULL END
       )
       RETURNING *
     `;

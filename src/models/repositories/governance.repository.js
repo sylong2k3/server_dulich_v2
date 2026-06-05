@@ -160,9 +160,9 @@ class GovernanceRepository {
         const sql = `
       UPDATE businesses
       SET
-        status = $1,
-        approved_by = CASE WHEN $1 = 'approved' THEN $2 ELSE approved_by END,
-        approved_at = CASE WHEN $1 = 'approved' THEN NOW() ELSE approved_at END,
+        status = $1::text,
+        approved_by = CASE WHEN $1::text = 'approved' THEN $2 ELSE approved_by END,
+        approved_at = CASE WHEN $1::text = 'approved' THEN NOW() ELSE approved_at END,
         rejection_note = $3,
         updated_at = NOW()
       WHERE id = $4
