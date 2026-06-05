@@ -154,7 +154,17 @@ class RatingService {
 
   _canModerate(user = {}) {
     const roleCode = String(user?.role?.code || '').toLowerCase();
-    return roleCode === 'system_admin' || roleCode === 'department_manager';
+    const isManagerRole = roleCode === 'system_admin' || 
+                          roleCode === 'department_manager' || 
+                          roleCode === 'ministry_manager';
+    
+    if (isManagerRole) return true;
+    
+    if (user && typeof user.hasPermission === 'function') {
+      return user.hasPermission('ratings', 'delete') || user.hasPermission('ratings', 'update');
+    }
+    
+    return false;
   }
 }
 

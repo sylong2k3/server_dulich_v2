@@ -98,13 +98,20 @@ class User {
             return true;
         }
 
+        const targetResource = String(resource || "").trim().toLowerCase();
+        const targetAction = String(action || "").trim().toLowerCase();
+
+        // Cấp quyền đọc mặc định cho quản lý cấp Bộ / Sở
+        if (roleCode === "department_manager" || roleCode === "ministry_manager") {
+            if ((targetResource === "businesses" || targetResource === "ratings") && targetAction === "read") {
+                return true;
+            }
+        }
+
         // Không có permission nào → từ chối (không bypass)
         if (!Array.isArray(this.permissions) || this.permissions.length === 0) {
             return false;
         }
-
-        const targetResource = String(resource || "").trim().toLowerCase();
-        const targetAction = String(action || "").trim().toLowerCase();
 
         return this.permissions.some((perm) => {
             const permResource = String(perm?.resource || "").trim().toLowerCase();

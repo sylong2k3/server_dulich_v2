@@ -8,11 +8,22 @@ const { normalizeLang } = require('../utils/i18n.utils');
 class BusinessService {
   // ==================== BUSINESSES ====================
 
-  static async getAll(query) {
+  static async getAll(query, viewer = {}) {
     const { page = 1, limit = 10, search, status, business_type, province_code, ward_code, sortBy, sortOrder, lang: rawLang } = query;
     const lang = normalizeLang(rawLang);
+
+    // Áp dụng giới hạn theo tỉnh của Sở (department_manager)
+    let finalProvinceCode = province_code;
+    const roleCode = String(viewer?.role?.code || '').toLowerCase();
+    if (roleCode === 'department_manager') {
+      const userProvinceCode = viewer.province_code || viewer.province?.code || viewer.department?.province_code || viewer.profile?.province_code;
+      if (userProvinceCode) {
+        finalProvinceCode = userProvinceCode;
+      }
+    }
+
     const { rows, total } = await BusinessRepository.findAll({
-      page, limit, search, status, business_type, province_code, ward_code, sortBy, sortOrder, lang,
+      page, limit, search, status, business_type, province_code: finalProvinceCode, ward_code, sortBy, sortOrder, lang,
     });
     return {
       items: rows.map(r => { const { total_count, ...item } = r; return item; }),
@@ -79,9 +90,20 @@ class BusinessService {
     return updated;
   }
 
-  static async updateStatus(id, { status, rejection_note }, adminId) {
+  static async updateStatus(id, { status, rejection_note }, user) {
     const business = await BusinessRepository.findById(id);
     if (!business) throw new Api404Error('Không tìm thấy doanh nghiệp');
+
+    const roleCode = String(user?.role?.code || '').toLowerCase();
+    const adminId = user?.id;
+
+    // Nếu là department_manager, kiểm tra tỉnh
+    if (roleCode === 'department_manager') {
+      const userProvinceCode = user.province_code || user.province?.code || user.department?.province_code || user.profile?.province_code;
+      if (userProvinceCode && business.province_code !== userProvinceCode) {
+        throw new Api403Error('Bạn chỉ có quyền duyệt doanh nghiệp trong tỉnh của mình');
+      }
+    }
 
     // Kiểm tra workflow trạng thái
     const validTransitions = {

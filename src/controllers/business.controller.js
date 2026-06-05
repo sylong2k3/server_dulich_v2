@@ -7,7 +7,7 @@ class BusinessController {
     // ==================== BUSINESSES ====================
 
     static getAll = asyncHandler(async (req, res) => {
-        const result = await BusinessService.getAll(req.query);
+        const result = await BusinessService.getAll(req.query, req.user);
         return OK(res, 'Danh sách doanh nghiệp', result);
     });
 
@@ -38,7 +38,7 @@ class BusinessController {
     });
 
     static updateStatus = asyncHandler(async (req, res) => {
-        const business = await BusinessService.updateStatus(req.params.businessId, req.body, req.user.id);
+        const business = await BusinessService.updateStatus(req.params.businessId, req.body, req.user);
         return OK(res, 'Cập nhật trạng thái doanh nghiệp thành công', { business });
     });
 
