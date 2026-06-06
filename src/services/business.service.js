@@ -42,8 +42,9 @@ class BusinessService {
     return business;
   }
 
-  static async getByOwner(ownerId) {
-    return BusinessRepository.findByOwnerId(ownerId);
+  static async getByOwner(ownerId, query = {}) {
+    const { status } = query;
+    return BusinessRepository.findByOwnerId(ownerId, status);
   }
 
   // NV-38: Đăng ký doanh nghiệp — tạo với status=pending, gửi thông báo Sở VHTTDL

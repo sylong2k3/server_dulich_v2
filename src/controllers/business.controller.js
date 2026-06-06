@@ -22,7 +22,7 @@ class BusinessController {
     });
 
     static getMyBusiness = asyncHandler(async (req, res) => {
-        const businesses = await BusinessService.getByOwner(req.user.id);
+        const businesses = await BusinessService.getByOwner(req.user.id, req.query);
         return OK(res, 'Doanh nghiệp của bạn', { businesses });
     });
 

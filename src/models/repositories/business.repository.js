@@ -71,14 +71,19 @@ class BusinessRepository {
     return result.rows[0] || null;
   }
 
-  static async findByOwnerId(ownerId) {
-    const sql = `
+  static async findByOwnerId(ownerId, status) {
+    const params = [ownerId];
+    let sql = `
       SELECT b.*, ST_AsGeoJSON(b.geom)::json AS geom
       FROM businesses b
       WHERE b.owner_id = $1
-      ORDER BY b.created_at DESC
     `;
-    const result = await db.query(sql, [ownerId]);
+    if (status) {
+      sql += ` AND b.status = $2`;
+      params.push(status);
+    }
+    sql += ` ORDER BY b.created_at DESC`;
+    const result = await db.query(sql, params);
     return result.rows;
   }
 

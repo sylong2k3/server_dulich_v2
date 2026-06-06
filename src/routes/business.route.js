@@ -8,6 +8,7 @@ const {
     registerBusinessSchema,
     updateBusinessSchema,
     updateBusinessStatusSchema,
+    getMyBusinessQuerySchema,
     businessIdParamSchema,
     businessServiceParamSchema,
     serviceQuerySchema,
@@ -68,7 +69,7 @@ router.get(
 // ROUTE: POST / - Tạo mới doanh nghiệp du lịch. Xử lý bởi BusinessController.register. Truy cập: yêu cầu đăng nhập, giới hạn vai trò BUSINESS_OWNER_ROLES.
 router.post('/', authenticateToken, requireRole(BUSINESS_OWNER_ROLES), validateBody(registerBusinessSchema), BusinessController.register);
 // ROUTE: GET /me - Lấy thông tin thuộc về tài khoản đang đăng nhập doanh nghiệp du lịch. Xử lý bởi BusinessController.getMyBusiness. Truy cập: yêu cầu đăng nhập, giới hạn vai trò BUSINESS_OWNER_ROLES.
-router.get('/me', authenticateToken, requireRole(BUSINESS_OWNER_ROLES), BusinessController.getMyBusiness);
+router.get('/me', authenticateToken, requireRole(BUSINESS_OWNER_ROLES), validateQuery(getMyBusinessQuerySchema), BusinessController.getMyBusiness);
 
 // ==================== ADMIN: Xem tất cả doanh nghiệp ====================
 // ROUTE: GET / - Lấy toàn bộ danh sách cho quản trị doanh nghiệp du lịch. Xử lý bởi BusinessController.getAll. Truy cập: yêu cầu đăng nhập, cần quyền businesses:read.

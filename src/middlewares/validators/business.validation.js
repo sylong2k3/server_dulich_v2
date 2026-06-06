@@ -106,11 +106,16 @@ const createServiceSchema = Joi.object({
 
 const updateServiceSchema = Joi.object(serviceBaseFields).min(1);
 
+const getMyBusinessQuerySchema = Joi.object({
+    status: Joi.string().valid(...BUSINESS_STATUS).optional(),
+});
+
 module.exports = {
     businessQuerySchema,
     registerBusinessSchema,
     updateBusinessSchema,
     updateBusinessStatusSchema,
+    getMyBusinessQuerySchema,
     businessIdParamSchema,
     businessServiceParamSchema,
     serviceQuerySchema,
