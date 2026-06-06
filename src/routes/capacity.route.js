@@ -8,6 +8,7 @@ const {
     tourIdParamSchema,
     logCapacitySchema,
     spotCapacitySettingsSchema,
+    tourCapacitySettingsSchema,
     alertConfigSchema,
     historyQuerySchema,
     statsQuerySchema,
@@ -43,6 +44,12 @@ router.post('/spots/:spotId/log', authenticateToken, checkPermission('capacity',
 
 // ROUTE: PATCH /spots/:spotId/settings - Cấu hình sức chứa tối đa. Xử lý bởi CapacityController.updateSpotSettings. Truy cập: yêu cầu đăng nhập, cần quyền capacity:create.
 router.patch('/spots/:spotId/settings', authenticateToken, checkPermission('capacity', 'update'), validateParams(spotIdParamSchema), validateBody(spotCapacitySettingsSchema), CapacityController.updateSpotSettings);
+
+// ROUTE: PATCH /tours/:tourId/settings - Cấu hình sức chứa tối đa của tour. Xử lý bởi CapacityController.updateTourSettings. Truy cập: yêu cầu đăng nhập, cần quyền capacity:update.
+router.patch('/tours/:tourId/settings', authenticateToken, checkPermission('capacity', 'update'), validateParams(tourIdParamSchema), validateBody(tourCapacitySettingsSchema), CapacityController.updateTourSettings);
+
+// ROUTE: DELETE /tours/:tourId/settings - Xóa cấu hình sức chứa tối đa của tour. Xử lý bởi CapacityController.deleteTourSettings. Truy cập: yêu cầu đăng nhập, cần quyền capacity:delete.
+router.delete('/tours/:tourId/settings', authenticateToken, checkPermission('capacity', 'delete'), validateParams(tourIdParamSchema), CapacityController.deleteTourSettings);
 
 // Admin — cấu hình cảnh báo
 // ROUTE: GET /configs - Truy vấn sức chứa và mật độ khách. Xử lý bởi CapacityController.getAlertConfigs. Truy cập: yêu cầu đăng nhập, cần quyền capacity:read.

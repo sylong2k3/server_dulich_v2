@@ -60,14 +60,20 @@ const alternativesQuerySchema = Joi.object({
     province_code: provinceCodeField(),
 });
 
+const tourCapacitySettingsSchema = Joi.object({
+    max_guests: Joi.number().integer().min(1).required(),
+});
+
 module.exports = {
     spotIdParamSchema,
     tourIdParamSchema,
     logCapacitySchema,
     spotCapacitySettingsSchema,
+    tourCapacitySettingsSchema,
     alertConfigSchema,
     historyQuerySchema,
     statsQuerySchema,
     alternativesQuerySchema,
     adminCapacityQuerySchema,
 };
+

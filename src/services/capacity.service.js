@@ -1,4 +1,4 @@
-﻿const CapacityRepository = require('../models/repositories/capacity.repository');
+const CapacityRepository = require('../models/repositories/capacity.repository');
 const { Api404Error, Api400Error, Api403Error } = require('../core/error.response');
 const { formatPagination } = require('../utils/responseFormatter');
 const { cacheOrFetch, invalidateByPrefix } = require('../utils/cache.utils');
@@ -304,6 +304,82 @@ class CapacityService {
     invalidateByPrefix('capacity:');
     
     return rows[0];
+  }
+
+  async updateTourSettings(tourId, data, viewer = {}) {
+    await this._ensureTourAccess(tourId, viewer?.user);
+    
+    const { query: dbQuery } = require('../configs/database');
+    const sql = `
+      UPDATE tour_packages 
+      SET max_guests = $1, updated_at = NOW() 
+      WHERE id = $2 
+      RETURNING max_guests
+    `;
+    const { rows } = await dbQuery(sql, [data.max_guests, tourId]);
+    
+    invalidateByPrefix('tours:');
+    invalidateByPrefix('capacity:');
+    
+    return rows[0];
+  }
+
+  async deleteTourSettings(tourId, viewer = {}) {
+    await this._ensureTourAccess(tourId, viewer?.user);
+    
+    const { query: dbQuery } = require('../configs/database');
+    const sql = `
+      UPDATE tour_packages 
+      SET max_guests = NULL, updated_at = NOW() 
+      WHERE id = $1 
+      RETURNING max_guests
+    `;
+    const { rows } = await dbQuery(sql, [tourId]);
+    
+    invalidateByPrefix('tours:');
+    invalidateByPrefix('capacity:');
+    
+    return rows[0];
+  }
+
+  async _ensureTourAccess(tourId, user) {
+    const TourRepository = require('../models/repositories/tour.repository');
+    const tour = await TourRepository.findById(tourId);
+    if (!tour) {
+      throw new Api404Error('Không tìm thấy tour du lịch');
+    }
+
+    const roleCode = this._roleCode(user);
+    
+    // Admin, Ministry, Department can update tour settings
+    const BYPASS_ROLES = new Set(['system_admin', 'ministry_manager', 'department_manager']);
+    if (BYPASS_ROLES.has(roleCode)) {
+      if (roleCode === 'department_manager') {
+        const provinceCode = this._resolveProvinceCode(user);
+        if (provinceCode && tour.province_code !== provinceCode) {
+          throw new Api403Error('Sở chỉ được thao tác tour trong tỉnh của mình');
+        }
+      }
+      return tour;
+    }
+
+    // Travel companies can manage their own tours
+    if (roleCode === 'travel_company' || roleCode === 'service_provider') {
+      if (!tour.business_id) {
+        throw new Api403Error('Tour không gắn với doanh nghiệp — không thể xác định quyền sở hữu');
+      }
+      
+      const BusinessRepository = require('../models/repositories/business.repository');
+      const businesses = await BusinessRepository.findByOwnerId(user?.id);
+      const businessIds = businesses.map(b => b.id);
+      
+      if (!businessIds.includes(tour.business_id)) {
+        throw new Api403Error('Bạn không có quyền chỉnh sửa tour của doanh nghiệp khác');
+      }
+      return tour;
+    }
+
+    throw new Api403Error('Bạn không có quyền thao tác dữ liệu tour này');
   }
 
   // ==================== SSE ====================

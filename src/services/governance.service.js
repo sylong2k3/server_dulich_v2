@@ -316,7 +316,7 @@ class GovernanceService {
     }
 
     static async listDepartmentReports(query, user) {
-        this.ensureAccess(user, this.DEPARTMENT_CODES);
+        this.ensureAccess(user, [...this.DEPARTMENT_CODES, ...this.MINISTRY_CODES]);
 
         const { page, limit } = this.normalizePagination(query);
         const { rows, total } = await GovernanceRepository.listDepartmentReports({
@@ -412,21 +412,28 @@ class GovernanceService {
     }
 
     static async listBusinessActivityReports(query, user) {
-        this.ensureAccess(user, this.ENTERPRISE_CODES);
+        this.ensureAccess(user, [...this.ENTERPRISE_CODES, ...this.MINISTRY_CODES, ...this.DEPARTMENT_CODES]);
 
         try {
             const { page, limit } = this.normalizePagination(query);
-            const scopedBusiness = query.business_id
-                ? await this.ensureBusinessAccess(
+            const isManagerOrAdmin = this.isAdmin(user) ||
+                this.MINISTRY_CODES.includes(String(user?.role?.code || '').toLowerCase()) ||
+                this.DEPARTMENT_CODES.includes(String(user?.role?.code || '').toLowerCase());
+
+            let scopedBusinessId = query.business_id;
+            if (query.business_id && !isManagerOrAdmin) {
+                const scopedBusiness = await this.ensureBusinessAccess(
                     query.business_id,
                     user,
                     'Bạn không có quyền xem báo cáo của doanh nghiệp này'
-                )
-                : null;
+                );
+                scopedBusinessId = scopedBusiness?.id;
+            }
+
             const { rows, total } = await GovernanceRepository.listBusinessActivityReports({
                 ...query,
-                business_id: scopedBusiness?.id || query.business_id,
-                owner_id: this.isAdmin(user) || query.business_id ? undefined : user?.id,
+                business_id: scopedBusinessId,
+                owner_id: isManagerOrAdmin || query.business_id ? undefined : user?.id,
                 page,
                 limit,
             });

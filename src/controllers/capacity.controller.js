@@ -49,6 +49,16 @@ class CapacityController {
     return OK(res, 'Cập nhật cấu hình sức chứa điểm du lịch thành công', { settings });
   });
 
+  static updateTourSettings = asyncHandler(async (req, res) => {
+    const settings = await capacityService.updateTourSettings(req.params.tourId, req.body, { user: req.user });
+    return OK(res, 'Cập nhật cấu hình sức chứa tour du lịch thành công', { settings });
+  });
+
+  static deleteTourSettings = asyncHandler(async (req, res) => {
+    await capacityService.deleteTourSettings(req.params.tourId, { user: req.user });
+    return OK(res, 'Xóa cấu hình sức chứa tour du lịch thành công');
+  });
+
   static getSuggestedAlternatives = asyncHandler(async (req, res) => {
     const alternatives = await capacityService.getSuggestedAlternatives(req.params.spotId, {
       radius_km: Number(req.query.radius_km) || 10,
