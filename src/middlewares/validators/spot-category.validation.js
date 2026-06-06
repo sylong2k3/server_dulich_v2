@@ -8,7 +8,7 @@ const msg = require('./common/messages');
 
 const categoryQuerySchema = Joi.object({
   ...paginationQuery({ defaultLimit: 50, maxLimit: 100 }),
-  search: Joi.string().trim().max(100).optional(),
+  search: Joi.string().trim().max(100).allow('').optional(),
   parent_id: numericId().optional().allow(null),
   is_active: Joi.boolean().optional(),
   ...sortQuery(['name_vi', 'sort_order', 'created_at'], {

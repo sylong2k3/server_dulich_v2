@@ -55,7 +55,7 @@ const alternativesQuerySchema = Joi.object({
         ['capacity_pct', 'visitor_count', 'max_capacity', 'name_vi', 'recorded_at'],
         { defaultSortBy: 'capacity_pct', defaultSortOrder: 'DESC' }
     ),
-    search: Joi.string().trim().max(100).optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
     status: Joi.string().valid('normal', 'busy', 'near_full', 'overloaded').optional(),
     province_code: provinceCodeField(),
 });

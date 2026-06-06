@@ -16,7 +16,7 @@ const businessQuerySchema = Joi.object({
         ['business_name', 'status', 'rating_avg', 'created_at'],
         { defaultSortBy: 'created_at' }
     ),
-    search: Joi.string().trim().max(100).optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
     status: Joi.string().valid(...BUSINESS_STATUS).optional(),
     business_type: Joi.string().trim().max(50).optional(),
     province_code: provinceCodeField(),

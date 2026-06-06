@@ -24,7 +24,7 @@ const tourQuerySchema = Joi.object({
         ['created_at', 'price_from_vnd', 'duration_days', 'rating_avg', 'published_at'],
         { defaultSortBy: 'created_at' }
     ),
-    search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).optional(),
+    search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).allow('').optional(),
     status: Joi.string().valid(...TOUR_STATUS).optional(),
     province_code: provinceCodeField(),
     business_id: uuid().optional(),
@@ -42,7 +42,7 @@ const tourAdminQuerySchema = Joi.object({
         ['created_at', 'price_from_vnd', 'duration_days', 'rating_avg', 'published_at', 'updated_at'],
         { defaultSortBy: 'created_at', defaultSortOrder: 'DESC' }
     ),
-    search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).optional(),
+    search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).allow('').optional(),
     status: Joi.string().valid(...TOUR_STATUS).optional(),
     province_code: provinceCodeField(),
     business_id: uuid().optional(),

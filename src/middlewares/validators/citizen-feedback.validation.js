@@ -95,7 +95,7 @@ const updateModerationStatusSchema = Joi.object({
 // Schema query lọc và phân trang
 const getFeedbacksQuerySchema = Joi.object({
   ...paginationQuery({ maxLimit: 100 }),
-  search: Joi.string().max(LIMITS.SEARCH_QUERY_MAX).optional().messages({
+  search: Joi.string().max(LIMITS.SEARCH_QUERY_MAX).allow('').optional().messages({
     'string.base': 'Từ khóa tìm kiếm phải là chuỗi ký tự',
     'string.max': msg.max('Từ khóa tìm kiếm', LIMITS.SEARCH_QUERY_MAX),
   }),

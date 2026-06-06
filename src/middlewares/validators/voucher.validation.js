@@ -24,7 +24,7 @@ const voucherAdminQuerySchema = Joi.object({
     business_id: uuidSchema.optional(),
     is_active: Joi.boolean().optional(),
     expired: Joi.boolean().optional(),
-    search: Joi.string().trim().max(100).optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
 });
 
 const voucherIdParamSchema = Joi.object({

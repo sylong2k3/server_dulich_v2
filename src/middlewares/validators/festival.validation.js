@@ -12,7 +12,7 @@ const festivalQuerySchema = Joi.object({
         ['name_vi', 'name', 'start_date', 'end_date', 'created_at'],
         { defaultSortBy: 'start_date', defaultSortOrder: 'ASC' }
     ),
-    search: Joi.string().trim().max(100).optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
     festival_type: Joi.string().trim().max(50).optional(),
     upcoming: Joi.boolean().optional(),
     is_published: Joi.boolean().optional(),
@@ -26,7 +26,7 @@ const festivalAdminQuerySchema = Joi.object({
         ['name_vi', 'name', 'start_date', 'end_date', 'created_at', 'updated_at'],
         { defaultSortBy: 'created_at', defaultSortOrder: 'DESC' }
     ),
-    search: Joi.string().trim().max(100).optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
     festival_type: Joi.string().trim().max(50).optional(),
     upcoming: Joi.boolean().optional(),
     is_published: Joi.boolean().optional(),

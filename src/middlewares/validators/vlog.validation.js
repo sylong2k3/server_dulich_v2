@@ -13,7 +13,7 @@ const vlogQuerySchema = Joi.object({
         ['title', 'view_count', 'like_count', 'created_at'],
         { defaultSortBy: 'created_at' }
     ),
-    search: Joi.string().trim().max(100).optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
     platform: Joi.string().valid(...VLOG_PLATFORM).optional(),
     user_id: uuid().optional(),
 });

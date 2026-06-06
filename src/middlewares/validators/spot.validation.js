@@ -30,7 +30,7 @@ const slugParamSchema = Joi.object({
 
 const spotListQueryFields = {
     lang: Joi.string().valid('vi', 'en').default('vi'),
-    search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).optional(),
+    search: Joi.string().trim().max(LIMITS.SEARCH_QUERY_MAX).allow('').optional(),
     category_id: Joi.number().integer().min(1).optional(),
     parent_category_id: Joi.number().integer().min(1).optional(),
     province_code: provinceCodeField(),

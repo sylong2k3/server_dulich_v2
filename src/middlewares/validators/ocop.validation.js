@@ -13,7 +13,7 @@ const ocopQuerySchema = Joi.object({
         ['name_vi', 'star_rating', 'price_vnd', 'created_at'],
         { defaultSortBy: 'created_at' }
     ),
-    search: Joi.string().trim().max(100).optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
     category: Joi.string().trim().max(50).optional(),
     star_rating: Joi.number().integer().min(3).max(5).optional(),
     province_code: provinceCodeField(),
@@ -30,7 +30,7 @@ const ocopAdminQuerySchema = Joi.object({
         ['name_vi', 'star_rating', 'price_vnd', 'created_at', 'updated_at'],
         { defaultSortBy: 'created_at', defaultSortOrder: 'DESC' }
     ),
-    search: Joi.string().trim().max(100).optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
     category: Joi.string().trim().max(50).optional(),
     star_rating: Joi.number().integer().min(3).max(5).optional(),
     province_code: provinceCodeField(),
