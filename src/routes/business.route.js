@@ -83,8 +83,8 @@ router.get('/:businessId', optionalAuth, validateParams(businessIdParamSchema), 
 router.patch('/:businessId', authenticateToken, requireRole(BUSINESS_OWNER_ROLES), validateParams(businessIdParamSchema), validateBody(updateBusinessSchema), BusinessController.update);
 
 // ==================== ADMIN: Kiểm duyệt doanh nghiệp ====================
-// ROUTE: PATCH /:businessId/status - Cập nhật doanh nghiệp du lịch. Xử lý bởi BusinessController.updateStatus. Truy cập: yêu cầu đăng nhập, giới hạn vai trò BUSINESS_REVIEWER_ROLES.
-router.patch('/:businessId/status', authenticateToken, requireRole(BUSINESS_REVIEWER_ROLES), validateParams(businessIdParamSchema), validateBody(updateBusinessStatusSchema), BusinessController.updateStatus);
+// ROUTE: PATCH /:businessId/status - Cập nhật doanh nghiệp du lịch. Xử lý bởi BusinessController.updateStatus. Truy cập: yêu cầu đăng nhập, giới hạn vai trò BUSINESS_REVIEWER_ROLES và BUSINESS_OWNER_ROLES.
+router.patch('/:businessId/status', authenticateToken, requireRole([...BUSINESS_REVIEWER_ROLES, ...BUSINESS_OWNER_ROLES]), validateParams(businessIdParamSchema), validateBody(updateBusinessStatusSchema), BusinessController.updateStatus);
 
 // ==================== NV-40: Dịch vụ du lịch ====================
 // ROUTE: GET /:businessId/services - Truy vấn doanh nghiệp du lịch. Xử lý bởi BusinessController.getServices. Truy cập: Không yêu cầu đăng nhập nếu middleware không chặn.

@@ -97,11 +97,23 @@ class BusinessService {
     const roleCode = String(user?.role?.code || '').toLowerCase();
     const adminId = user?.id;
 
-    // Nếu là department_manager, kiểm tra tỉnh
-    if (roleCode === 'department_manager') {
-      const userProvinceCode = user.province_code || user.province?.code || user.department?.province_code || user.profile?.province_code;
-      if (userProvinceCode && business.province_code !== userProvinceCode) {
-        throw new Api403Error('Bạn chỉ có quyền duyệt doanh nghiệp trong tỉnh của mình');
+    const BUSINESS_REVIEWER_ROLES = ['system_admin', 'ministry_manager', 'department_manager'];
+    const isReviewer = BUSINESS_REVIEWER_ROLES.includes(roleCode);
+
+    if (!isReviewer) {
+      if (business.owner_id !== user?.id) {
+        throw new Api403Error('Bạn không có quyền cập nhật trạng thái doanh nghiệp này');
+      }
+      if (business.status !== 'approved' || status !== 'suspended') {
+        throw new Api403Error('Doanh nghiệp chỉ được phép tự đóng cửa (tạm ngưng hoạt động). Việc mở lại phải do Sở VHTTDL thực hiện.');
+      }
+    } else {
+      // Nếu là department_manager, kiểm tra tỉnh
+      if (roleCode === 'department_manager') {
+        const userProvinceCode = user.province_code || user.province?.code || user.department?.province_code || user.profile?.province_code;
+        if (userProvinceCode && business.province_code !== userProvinceCode) {
+          throw new Api403Error('Bạn chỉ có quyền duyệt doanh nghiệp trong tỉnh của mình');
+        }
       }
     }
 
