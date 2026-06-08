@@ -7,8 +7,21 @@ class CapacityRepository {
         ts.id AS spot_id,
         ts.name_vi,
         cl.visitor_count,
-        cl.capacity_pct,
-        cl.status,
+        CASE
+          WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cl.visitor_count IS NOT NULL
+            THEN ROUND((cl.visitor_count::numeric / ts.max_capacity) * 100, 2)::numeric(5,2)
+          ELSE cl.capacity_pct
+        END AS capacity_pct,
+        CASE
+          WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cl.visitor_count IS NOT NULL THEN
+            CASE
+              WHEN ROUND((cl.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 100 THEN 'overloaded'
+              WHEN ROUND((cl.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 85 THEN 'near_full'
+              WHEN ROUND((cl.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 60 THEN 'busy'
+              ELSE 'normal'
+            END
+          ELSE cl.status
+        END::varchar(20) AS status,
         cl.recorded_at,
         ts.max_capacity,
         ts.alert_threshold_pct,
@@ -82,9 +95,29 @@ class CapacityRepository {
       values.push(spot_status);
     }
 
-    // Capacity status filter requires cl.status
+    const effectiveCapacityPct = `
+      CASE
+        WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cl.visitor_count IS NOT NULL
+          THEN ROUND((cl.visitor_count::numeric / ts.max_capacity) * 100, 2)::numeric(5,2)
+        ELSE cl.capacity_pct
+      END
+    `;
+    const effectiveCapacityStatus = `
+      CASE
+        WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cl.visitor_count IS NOT NULL THEN
+          CASE
+            WHEN ROUND((cl.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 100 THEN 'overloaded'
+            WHEN ROUND((cl.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 85 THEN 'near_full'
+            WHEN ROUND((cl.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 60 THEN 'busy'
+            ELSE 'normal'
+          END
+        ELSE cl.status
+      END::varchar(20)
+    `;
+
+    // Capacity status filter uses the effective status against current max_capacity.
     if (status) {
-      whereClauses.push(`cl.status = $${paramIdx++}`);
+      whereClauses.push(`${effectiveCapacityStatus} = $${paramIdx++}`);
       values.push(status);
     }
 
@@ -92,7 +125,7 @@ class CapacityRepository {
 
     // Validate and build sorting
     const allowedSortFields = {
-      capacity_pct: 'cl.capacity_pct',
+      capacity_pct: effectiveCapacityPct,
       visitor_count: 'cl.visitor_count',
       max_capacity: 'ts.max_capacity',
       name_vi: 'ts.name_vi',
@@ -113,8 +146,8 @@ class CapacityRepository {
         ts.id AS spot_id,
         ts.name_vi,
         cl.visitor_count,
-        cl.capacity_pct,
-        cl.status,
+        ${effectiveCapacityPct} AS capacity_pct,
+        ${effectiveCapacityStatus} AS status,
         cl.recorded_at,
         ts.max_capacity,
         ts.alert_threshold_pct,
