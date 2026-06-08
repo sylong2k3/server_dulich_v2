@@ -41,16 +41,20 @@ WHERE u.role_id = r.id
   );
 
 UPDATE auth.users u
-SET full_name = CASE r.code
-        WHEN 'spot_operator' THEN 'Đơn vị vận hành điểm du lịch Ninh Bình'
-        WHEN 'travel_company' THEN 'Công ty lữ hành Ninh Bình'
-        WHEN 'service_provider' THEN 'Đơn vị cung cấp dịch vụ du lịch Ninh Bình'
+SET full_name = CASE u.email
+        WHEN 'trangan.site.operator@gmail.com' THEN 'Vận hành Tràng An'
+        WHEN 'trangan.heritage.travel@gmail.com' THEN 'Lữ hành Tràng An'
+        WHEN 'tamcoc.tourism.service@gmail.com' THEN 'Dịch vụ Tam Cốc'
         ELSE u.full_name
     END,
     updated_at = NOW()
 FROM auth.roles r
 WHERE u.role_id = r.id
-  AND r.code IN ('spot_operator', 'travel_company', 'service_provider')
+  AND u.email IN (
+      'trangan.site.operator@gmail.com',
+      'trangan.heritage.travel@gmail.com',
+      'tamcoc.tourism.service@gmail.com'
+  )
   AND EXISTS (
       SELECT 1
       FROM businesses b

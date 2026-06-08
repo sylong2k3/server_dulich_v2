@@ -82,7 +82,15 @@ class BusinessRepository {
       sql += ` AND b.status = $2`;
       params.push(status);
     }
-    sql += ` ORDER BY b.created_at DESC`;
+    sql += ` ORDER BY 
+      CASE b.status
+        WHEN 'approved' THEN 1
+        WHEN 'pending' THEN 2
+        WHEN 'suspended' THEN 3
+        WHEN 'rejected' THEN 4
+        ELSE 5
+      END ASC,
+      b.created_at DESC`;
     const result = await db.query(sql, params);
     return result.rows;
   }
