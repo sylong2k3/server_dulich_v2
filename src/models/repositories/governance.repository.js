@@ -574,7 +574,86 @@ class GovernanceRepository {
     }
 
     static async getBusinessDashboardSummary(businessId, { dateFrom, dateTo }) {
-        const summarySql = `
+        const operationalSql = `
+      WITH service_stats AS (
+        SELECT
+          COUNT(*)::int AS service_count,
+          COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active_service_count,
+          COUNT(DISTINCT spot_id) FILTER (WHERE spot_id IS NOT NULL)::int AS linked_spot_count
+        FROM services
+        WHERE business_id = $1
+      ),
+      tour_stats AS (
+        SELECT
+          COUNT(*)::int AS tour_count,
+          COUNT(*) FILTER (WHERE status IN ('published', 'active'))::int AS active_tour_count,
+          COALESCE(SUM(price_from_vnd) FILTER (WHERE status IN ('published', 'active')), 0) AS listed_tour_value_vnd,
+          COALESCE(SUM(max_guests) FILTER (WHERE status IN ('published', 'active')), 0)::int AS listed_tour_capacity
+        FROM tour_packages
+        WHERE business_id = $1
+      ),
+      ocop_stats AS (
+        SELECT
+          COUNT(*)::int AS ocop_count,
+          COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active_ocop_count,
+          ROUND(COALESCE(AVG(star_rating) FILTER (WHERE is_active = TRUE), 0)::numeric, 2) AS avg_ocop_stars,
+          COALESCE(SUM(price_vnd) FILTER (WHERE is_active = TRUE), 0) AS listed_ocop_value_vnd
+        FROM ocop_products
+        WHERE business_id = $1
+      ),
+      rating_stats AS (
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'published')::int AS rating_count,
+          ROUND(COALESCE(AVG(stars) FILTER (WHERE status = 'published'), 0)::numeric, 2) AS rating_avg
+        FROM ratings
+        WHERE business_id = $1
+      ),
+      voucher_stats AS (
+        SELECT
+          COUNT(*)::int AS voucher_count,
+          COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active_voucher_count,
+          COALESCE(SUM(used_count) FILTER (WHERE is_active = TRUE), 0)::int AS voucher_used_count
+        FROM vouchers
+        WHERE business_id = $1
+      ),
+      capacity_stats AS (
+        SELECT
+          COALESCE(SUM(vc.visitor_count), 0)::int AS current_visitors,
+          ROUND(COALESCE(AVG(vc.capacity_pct), 0)::numeric, 2) AS avg_capacity_pct,
+          COUNT(*) FILTER (WHERE vc.status IN ('near_full', 'overloaded'))::int AS capacity_alert_count
+        FROM services s
+        INNER JOIN v_current_capacity vc ON vc.spot_id = s.spot_id
+        WHERE s.business_id = $1
+      )
+      SELECT
+        ss.service_count,
+        ss.active_service_count,
+        ss.linked_spot_count,
+        ts.tour_count,
+        ts.active_tour_count,
+        ts.listed_tour_value_vnd,
+        ts.listed_tour_capacity,
+        os.ocop_count,
+        os.active_ocop_count,
+        os.avg_ocop_stars,
+        os.listed_ocop_value_vnd,
+        rs.rating_count,
+        rs.rating_avg,
+        vs.voucher_count,
+        vs.active_voucher_count,
+        vs.voucher_used_count,
+        cs.current_visitors,
+        cs.avg_capacity_pct,
+        cs.capacity_alert_count
+      FROM service_stats ss
+      CROSS JOIN tour_stats ts
+      CROSS JOIN ocop_stats os
+      CROSS JOIN rating_stats rs
+      CROSS JOIN voucher_stats vs
+      CROSS JOIN capacity_stats cs
+    `;
+
+        const reportedSummarySql = `
       SELECT
         COALESCE(SUM(total_revenue_vnd), 0) AS total_revenue_vnd,
         COALESCE(SUM(total_bookings), 0) AS total_bookings,
@@ -615,14 +694,29 @@ class GovernanceRepository {
       LIMIT 20
     `;
 
-        const [summaryRes, trendRes, capacityRes] = await Promise.all([
-            query(summarySql, [businessId, dateFrom, dateTo]),
+        const [operationalRes, reportedSummaryRes, trendRes, capacityRes] = await Promise.all([
+            query(operationalSql, [businessId]),
+            query(reportedSummarySql, [businessId, dateFrom, dateTo]),
             query(trendSql, [businessId, dateFrom, dateTo]),
             query(spotCapacitySql, [businessId]),
         ]);
 
+        const operational = operationalRes.rows[0] || {};
+        const reported = reportedSummaryRes.rows[0] || {};
+
         return {
-            summary: summaryRes.rows[0],
+            summary: {
+                ...operational,
+                report_count: Number(reported.report_count || 0),
+                reported_revenue_vnd: reported.total_revenue_vnd || 0,
+                reported_bookings: reported.total_bookings || 0,
+                reported_visitors: reported.total_visitors || 0,
+            },
+            reported_metrics: {
+                ...reported,
+                source: 'business_activity_reports',
+                note: 'Số liệu doanh thu, booking và visitor là dữ liệu doanh nghiệp tự báo cáo trong database, không phải dữ liệu giao dịch phát sinh.',
+            },
             revenue_trend: trendRes.rows,
             capacity_alerts: capacityRes.rows,
         };
