@@ -7,7 +7,14 @@ async function run() {
     try {
         await client.query('BEGIN');
 
-        // 1. Delete activity reports associated with mock businesses
+        // 1. Delete citizen feedbacks associated with mock reports
+        const deletedFeedbacks = await client.query(`
+            DELETE FROM citizen_feedbacks
+            WHERE title LIKE '[MOCK]%'
+        `);
+        console.log(`Deleted ${deletedFeedbacks.rowCount} citizen feedbacks.`);
+
+        // 1.5. Delete activity reports associated with mock businesses
         const deletedReports = await client.query(`
             DELETE FROM business_activity_reports
             WHERE business_id IN (
@@ -33,7 +40,15 @@ async function run() {
         // 4. Delete mock users
         const deletedUsers = await client.query(`
             DELETE FROM auth.users
-            WHERE email = 'mock_seeder_user@tourismpj.gov.vn'
+            WHERE email IN (
+                'mock_seeder_user@tourismpj.gov.vn',
+                'mock_travel_company@tourismpj.gov.vn',
+                'mock_service_provider@tourismpj.gov.vn',
+                'mock_spot_operator@tourismpj.gov.vn',
+                'mock_tourist_1@tourismpj.gov.vn',
+                'mock_tourist_2@tourismpj.gov.vn',
+                'mock_tourist_3@tourismpj.gov.vn'
+            )
         `);
         console.log(`Deleted ${deletedUsers.rowCount} mock users.`);
 
@@ -59,4 +74,7 @@ async function run() {
     }
 }
 
-run().catch(() => process.exit(1));
+run().catch((err) => {
+    console.error('Fatal error during execution:', err);
+    process.exit(1);
+});

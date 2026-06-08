@@ -38,7 +38,7 @@ const NUM_WORKERS = parseInt(process.env.CLUSTER_WORKERS, 10)
 // Dành 10 connections cho PostgreSQL admin/superuser/background tasks.
 // Mặc định 200 sau khi đã ALTER SYSTEM SET max_connections = 200.
 const PG_MAX_CONNECTIONS = parseInt(process.env.PG_MAX_CONNECTIONS, 10) || 200;
-const SAFE_CONNECTIONS   = PG_MAX_CONNECTIONS - 10;
+const SAFE_CONNECTIONS = PG_MAX_CONNECTIONS - 10;
 const POOL_MAX = Math.max(2, Math.floor(SAFE_CONNECTIONS / NUM_WORKERS));
 const POOL_MIN = Math.max(1, Math.floor(POOL_MAX / 4));
 
@@ -63,7 +63,7 @@ if (cluster.isPrimary) {
   }
 
   cluster.on('exit', (worker, code, signal) => {
-    const appId  = workerIdMap.get(worker.id) ?? `orphan-${Date.now()}`;
+    const appId = workerIdMap.get(worker.id) ?? `orphan-${Date.now()}`;
     const reason = signal || `exit code ${code}`;
     workerIdMap.delete(worker.id);
 
@@ -77,7 +77,7 @@ if (cluster.isPrimary) {
   });
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
   function spawnWorker(appWorkerId) {
     const worker = cluster.fork({

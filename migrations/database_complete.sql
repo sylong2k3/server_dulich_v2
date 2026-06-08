@@ -190,6 +190,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
     date_of_birth       DATE,
     gender              VARCHAR(10),
     nationality         VARCHAR(100),
+    province_code       VARCHAR(20) REFERENCES vn_units.provinces(code),
     preferred_language  VARCHAR(10) DEFAULT 'vi',
     preferred_currency  VARCHAR(10) DEFAULT 'VND',
     preferred_distance  VARCHAR(10) DEFAULT 'km',
@@ -1053,6 +1054,7 @@ CREATE TABLE IF NOT EXISTS itinerary_stops (
 CREATE INDEX IF NOT EXISTS idx_users_role  ON auth.users(role_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON auth.users(email);
 CREATE INDEX IF NOT EXISTS idx_users_sso   ON auth.users(sso_provider, sso_uid);
+CREATE INDEX IF NOT EXISTS idx_users_province_code ON auth.users(province_code);
 CREATE INDEX IF NOT EXISTS idx_users_active ON auth.users(id) WHERE is_active = TRUE;
 
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user    ON auth.refresh_tokens(user_id);

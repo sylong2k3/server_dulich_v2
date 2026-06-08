@@ -68,6 +68,7 @@ class UserRepository {
       phone,
       avatar_url,
       role_id,
+      province_code,
       sso_provider,
       sso_uid,
     } = userData;
@@ -83,6 +84,10 @@ class UserRepository {
       avatar_url: avatar_url ? String(avatar_url).trim() : null,
       role_id: resolvedRoleId,
     };
+
+    if (province_code !== undefined) {
+      insertData.province_code = province_code ? String(province_code).trim() : null;
+    }
 
     // Mật khẩu chỉ cần khi không dùng SSO
     if (password) {
