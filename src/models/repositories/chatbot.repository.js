@@ -81,35 +81,28 @@ class ChatbotRepository {
     tool_calls = null,
     latency_ms = null,
   }) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const { rows } = await client.query(
-        `INSERT INTO ai_chat_messages
-           (session_id, role, content, map_actions, token_usage, tool_calls, latency_ms)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [
-          session_id,
-          role,
-          content,
-          map_actions ? JSON.stringify(map_actions) : null,
-          token_usage ? JSON.stringify(token_usage) : null,
-          tool_calls ? JSON.stringify(tool_calls) : null,
-          latency_ms,
-        ]
-      );
-      await client.query(
-        `UPDATE ai_chat_sessions SET last_message_at = NOW() WHERE id = $1`,
-        [session_id]
-      );
-      await client.query('COMMIT');
-      return rows[0];
-    } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw err;
-    } finally {
-      client.release();
-    }
+    const { rows } = await pool.query(
+      `INSERT INTO ai_chat_messages
+         (session_id, role, content, map_actions, token_usage, tool_calls, latency_ms)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        session_id,
+        role,
+        content,
+        map_actions ? JSON.stringify(map_actions) : null,
+        token_usage ? JSON.stringify(token_usage) : null,
+        tool_calls ? JSON.stringify(tool_calls) : null,
+        latency_ms,
+      ]
+    );
+
+    // Cập nhật last_message_at song song không cần dùng transaction lock
+    await pool.query(
+      `UPDATE ai_chat_sessions SET last_message_at = NOW() WHERE id = $1`,
+      [session_id]
+    );
+
+    return rows[0];
   }
 
   /** Phân trang tin nhắn (UI hiển thị, ASC theo thời gian). */

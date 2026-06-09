@@ -3,11 +3,16 @@ const UserRepository = require('../models/repositories/user.repository');
 const { getOpenAIClient, MissingOpenAIKeyError } = require('../configs/openai');
 const { getToolDefinitions, callTool } = require('./chatbot.tools');
 const { Api404Error, Api403Error, Api400Error } = require('../core/error.response');
+const TaskQueue = require('../utils/task-queue');
 
 const HISTORY_LIMIT = 10;
 const MAX_TOOL_ITERATIONS = 6;
 const OPENAI_MODEL = process.env.OPENAI_CHATBOT_MODEL || 'gpt-4o-mini';
 const ANONYMOUS_MESSAGE_LIMIT = Number(process.env.CHATBOT_ANONYMOUS_LIMIT) || 10;
+
+const CONCURRENCY_LIMIT = Number(process.env.CHATBOT_CONCURRENCY_LIMIT) || 3;
+const QUEUE_TIMEOUT = Number(process.env.CHATBOT_QUEUE_TIMEOUT_MS) || 20000;
+const chatbotQueue = new TaskQueue(CONCURRENCY_LIMIT, QUEUE_TIMEOUT);
 const DEFAULT_FLY_TO_ZOOM = 15;
 const DEFAULT_MAP_PADDING = 80;
 const NDVI_LSTM_REGION_IMAGES = [
@@ -429,11 +434,13 @@ class ChatbotService {
     const openaiMessages = [{ role: 'system', content: systemPrompt }, ...messages];
 
     try {
-      const { content, mapActions, tokenUsage, toolCallTrace } = await runChatCompletion({
-        openaiMessages,
-        tools,
-        ctx: { userId: actor.userId || null, sessionType: session.session_type },
-      });
+      const { content, mapActions, tokenUsage, toolCallTrace } = await chatbotQueue.run(() =>
+        runChatCompletion({
+          openaiMessages,
+          tools,
+          ctx: { userId: actor.userId || null, sessionType: session.session_type },
+        })
+      );
 
       const saved = await ChatbotRepository.saveMessage({
         session_id: sessionId,
@@ -461,8 +468,9 @@ class ChatbotService {
 
       // Các lỗi runtime khác (network, rate limit, model error…) — vẫn lưu lại
       // 1 tin nhắn assistant để UI không bị "mồ côi" tin nhắn user.
-      const errMsg =
-        'Xin lỗi, có lỗi khi xử lý yêu cầu của bạn. Vui lòng thử lại sau ít phút.';
+      const errMsg = err.code === 'QUEUE_TIMEOUT'
+        ? err.message
+        : 'Xin lỗi, có lỗi khi xử lý yêu cầu của bạn. Vui lòng thử lại sau ít phút.';
       try {
         await ChatbotRepository.saveMessage({
           session_id: sessionId,
@@ -471,6 +479,10 @@ class ChatbotService {
           latency_ms: Date.now() - startedAt,
         });
       } catch (_) { /* swallow secondary write error */ }
+
+      if (err.code === 'QUEUE_TIMEOUT') {
+        throw new Api400Error(err.message);
+      }
       throw err;
     }
   }
