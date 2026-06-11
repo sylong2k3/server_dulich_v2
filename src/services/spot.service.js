@@ -12,6 +12,10 @@ const QRCode = require('qrcode');
 const BYPASS_ROLES = new Set(['system_admin', 'ministry_manager', 'department_manager']);
 const GLOBAL_SPOT_ROLES = new Set(['system_admin', 'ministry_manager']);
 const DEPARTMENT_SPOT_ROLES = new Set(['department_manager']);
+// Các role "sở hữu" điểm du lịch (spot_operator vận hành điểm; service_provider
+// tạo điểm nhà hàng/khách sạn). Ở ngữ cảnh QUẢN TRỊ (GET /spots/admin) họ chỉ
+// thấy điểm do mình tạo (created_by). travel_company không tạo điểm nhưng vẫn
+// giữ ở đây để admin-list của họ trả rỗng thay vì lộ điểm người khác.
 const OWNER_SPOT_ROLES = new Set(['spot_operator', 'travel_company', 'service_provider']);
 
 class SpotService {
@@ -46,7 +50,7 @@ class SpotService {
   async getAllSpots(options = {}, viewer = {}) {
     const page = Math.max(1, parseInt(options.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(options.limit, 10) || 20));
-    const effectiveOptions = this._applyListScope({ ...options, page, limit }, viewer?.user);
+    const effectiveOptions = this._applyPublicListScope({ ...options, page, limit }, viewer?.user);
     const cacheKey = [
       'spots:list',
       effectiveOptions.lang || 'vi',
@@ -87,10 +91,14 @@ class SpotService {
     return { spots: result.data, pagination: result.pagination };
   }
 
-  async getMapSpots(options = {}, viewer = {}) {
+  async getMapSpots(options = {}) {
     const page = Math.max(1, parseInt(options.page, 10) || 1);
     const limit = Math.min(1000, Math.max(1, parseInt(options.limit, 10) || 500));
-    const effectiveOptions = this._applyListScope({ ...options, page, limit, capacity: options.capacity ?? true }, viewer?.user);
+    // Bản đồ là ROUTE PUBLIC: luôn trả điểm active công khai, KHÔNG phụ thuộc
+    // người đăng nhập (không lọc theo created_by/role). optionalAuth chỉ dùng
+    // để cá nhân hoá phần khác, không ảnh hưởng phạm vi dữ liệu bản đồ.
+    const effectiveOptions = { ...options, page, limit, capacity: options.capacity ?? true, status: 'active' };
+    delete effectiveOptions.created_by;
     const cacheKey = [
       'spots:map',
       effectiveOptions.lang || 'vi',
@@ -440,6 +448,38 @@ class SpotService {
       });
     }
     return SpotRepository.deleteSpotMedia(mediaId);
+  }
+
+  /**
+   * Scope cho danh sách CÔNG KHAI (GET /spots, GET /spots/map).
+   * Mục tiêu: ai cũng duyệt được điểm active công khai — để lữ hành chọn điểm
+   * gắn vào tour stop, service_provider liên kết dịch vụ, khách xem bản đồ...
+   * KHÔNG lọc theo created_by. Việc quản lý "điểm của tôi" nằm ở GET /spots/admin.
+   */
+  _applyPublicListScope(options = {}, user) {
+    const roleCode = this._roleCode(user);
+    const scoped = { ...options };
+
+    // Bộ / Admin: xem mọi trạng thái theo query (preview draft/archived).
+    if (GLOBAL_SPOT_ROLES.has(roleCode)) {
+      return scoped;
+    }
+
+    // Sở: giới hạn trong tỉnh quản lý nếu xác định được, ngược lại chỉ active.
+    if (DEPARTMENT_SPOT_ROLES.has(roleCode)) {
+      const provinceCode = this._resolveProvinceCode(user, scoped);
+      if (provinceCode) {
+        scoped.province_code = provinceCode;
+      } else {
+        scoped.status = 'active';
+      }
+      return scoped;
+    }
+
+    // spot_operator / travel_company / service_provider / tourist / khách:
+    // chỉ thấy điểm active công khai.
+    scoped.status = 'active';
+    return scoped;
   }
 
   _applyListScope(options = {}, user) {

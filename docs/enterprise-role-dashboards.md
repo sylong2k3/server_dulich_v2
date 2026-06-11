@@ -125,22 +125,11 @@ GET /enterprise/businesses/:businessId/dashboard?variant=travel_company   # ch�
 - Vẫn kiểm tra trong service: business không tồn tại → `Api404Error`; không sở hữu và không phải admin → `Api403Error`
   (không phụ thuộc variant).
 
-## 8. Chạy test
-
-Property-based tests dùng [`fast-check`](https://github.com/dubzzz/fast-check) (devDependency) và test runner tích hợp
-của Node (`node:test`).
+## 8. Lint
 
 ```bash
-npm test          # chạy toàn bộ test trong src/services/dashboard
 npm run lint      # eslint
 ```
-
-Các test bao gồm:
-- `dashboard-resolver.test.js` — bảng quyết định + 3 property cho `resolveVariant`.
-- `providers.test.js` — property: số mặc định ≥ 0 hữu hạn, `voucher_redemption_rate` an toàn khi `max_uses = 0`,
-  và tập khoá `summary` của 3 variant đôi một khác nhau.
-- `get-business-dashboard.test.js` — unit test service-level: nhánh 404/403, happy-path từng role, override
-  admin-only, và khẳng định dashboard **không gọi method ghi** (read-only).
 
 ## 9. Lưu ý schema
 
