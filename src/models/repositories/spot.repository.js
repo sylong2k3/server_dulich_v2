@@ -25,6 +25,7 @@ class SpotRepository {
       province_code,
       status = 'active',
       is_featured,
+      has_vr,
       rating_min,
       search,
       sortBy,
@@ -85,6 +86,12 @@ class SpotRepository {
     if (is_featured !== undefined) {
       whereClause += ` AND ts.is_featured = $${paramCount}`;
       values.push(is_featured === 'true' || is_featured === true);
+      paramCount++;
+    }
+
+    if (has_vr !== undefined) {
+      whereClause += ` AND ts.has_vr_360 = $${paramCount}`;
+      values.push(has_vr === 'true' || has_vr === true);
       paramCount++;
     }
 

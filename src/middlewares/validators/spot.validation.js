@@ -36,6 +36,7 @@ const spotListQueryFields = {
     province_code: provinceCodeField(),
     status: Joi.string().valid(...SPOT_STATUS).optional(),
     is_featured: Joi.boolean().optional(),
+    has_vr: Joi.boolean().optional(),
     rating_min: Joi.number().min(0).max(5).optional(),
     capacity: Joi.boolean().optional(),
 };
