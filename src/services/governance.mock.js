@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { query } = require('../configs/database');
+const DashboardResolver = require('./dashboard/dashboard-resolver');
 
 // Helpers for mock data generation
 const randomUUID = () => crypto.randomUUID();
@@ -496,48 +497,127 @@ class GovernanceMock {
             created_at: new Date().toISOString()
         };
 
-        const summary = {
+        // Resolve variant theo business_type (mock không có user) hoặc override hợp lệ.
+        const variant = DashboardResolver.resolveVariant({}, bizInfo, query.variant);
+
+        const period = {
+            type: periodType,
+            year,
+            from: `${year}-01-01`,
+            to: `${year}-05-28`
+        };
+
+        const reported_metrics = {
             total_revenue_vnd: randomInt(1200, 3600) * 1000000,
             total_bookings: randomInt(800, 1800),
             total_visitors: randomInt(3000, 8000),
             avg_capacity_pct: randomFloat(70.0, 92.4),
-            report_count: 5
+            report_count: 5,
+            source: 'business_activity_reports',
+            note: 'Số liệu doanh nghiệp tự báo cáo (dữ liệu mô phỏng).'
         };
 
-        const revenue_trend = [
-            { period: `${year}-01`, revenue_vnd: randomInt(200, 450) * 1000000, bookings: randomInt(100, 250), visitors: randomInt(500, 1000) },
-            { period: `${year}-02`, revenue_vnd: randomInt(300, 550) * 1000000, bookings: randomInt(150, 350), visitors: randomInt(800, 1500) },
-            { period: `${year}-03`, revenue_vnd: randomInt(250, 500) * 1000000, bookings: randomInt(120, 300), visitors: randomInt(700, 1200) },
-            { period: `${year}-04`, revenue_vnd: randomInt(400, 800) * 1000000, bookings: randomInt(200, 450), visitors: randomInt(1000, 2000) },
-            { period: `${year}-05`, revenue_vnd: randomInt(350, 750) * 1000000, bookings: randomInt(180, 400), visitors: randomInt(900, 1800) }
-        ];
+        const monthlyTrend = (mapper) => [1, 2, 3, 4, 5].map(m => mapper(`${year}-${String(m).padStart(2, '0')}`));
 
-        // Filter spots in same province for alerts
+        // Các spot cùng tỉnh để mô phỏng highlight.
         const provinceSpots = spots.filter(s => s.province_code === bizInfo.province_code);
         const activeSpots = provinceSpots.length > 0 ? provinceSpots : spots;
 
-        const capacity_alerts = activeSpots.slice(0, 3).map((spot, idx) => {
-            const capacity_pct = idx === 0 ? randomFloat(90.1, 98.4) : randomFloat(50.0, 80.0);
-            return {
-                spot_id: spot.id,
-                name_vi: spot.name_vi,
-                capacity_pct,
-                status: capacity_pct >= 90 ? 'near_full' : 'normal',
-                recorded_at: new Date(Date.now() - idx * 30 * 60000).toISOString()
-            };
-        });
+        const base = { variant, period, business: bizInfo, reported_metrics };
 
+        if (variant === 'spot_operator') {
+            const highlights = activeSpots.slice(0, 5).map((spot, idx) => {
+                const capacity_pct = idx === 0 ? randomFloat(90.1, 98.4) : randomFloat(40.0, 85.0);
+                return {
+                    spot_id: spot.id,
+                    name_vi: spot.name_vi,
+                    visitor_count: Math.round(spot.max_capacity * (capacity_pct / 100)),
+                    capacity_pct,
+                    status: capacity_pct >= 100 ? 'overloaded' : (capacity_pct >= 85 ? 'near_full' : 'normal'),
+                    recorded_at: new Date(Date.now() - idx * 30 * 60000).toISOString()
+                };
+            });
+            return {
+                ...base,
+                summary: {
+                    managed_spot_count: activeSpots.length,
+                    current_visitors: randomInt(2000, 9000),
+                    avg_capacity_pct: randomFloat(60.0, 88.0),
+                    peak_capacity_pct: randomFloat(90.0, 99.0),
+                    capacity_alert_count: randomInt(0, 3),
+                    spot_rating_avg: randomFloat(3.8, 4.9),
+                    spot_rating_count: randomInt(50, 500),
+                    ticket_price_range: { min: 50000, max: 250000 },
+                    experience_features: { vr360: randomInt(0, 3), ar: randomInt(0, 2), audio: randomInt(0, 4) }
+                },
+                trend: monthlyTrend(period => ({ period, visits: randomInt(500, 2500) })),
+                highlights
+            };
+        }
+
+        if (variant === 'travel_company') {
+            const highlights = Array.from({ length: 5 }).map((_, idx) => ({
+                id: `tour-${idx + 1}`,
+                name_vi: `Tour khám phá Ninh Bình ${idx + 1} ngày`,
+                rating_avg: randomFloat(3.9, 5.0),
+                rating_count: randomInt(10, 200),
+                price_from_vnd: randomInt(8, 40) * 100000,
+                status: 'published',
+                is_featured: idx === 0
+            }));
+            return {
+                ...base,
+                summary: {
+                    tour_count: randomInt(8, 30),
+                    active_tour_count: randomInt(5, 20),
+                    featured_tour_count: randomInt(1, 5),
+                    avg_tour_price_vnd: randomInt(15, 35) * 100000,
+                    total_listed_capacity: randomInt(200, 1200),
+                    avg_tour_duration_days: randomFloat(1.5, 5.0),
+                    tour_rating_avg: randomFloat(4.0, 4.9),
+                    tour_rating_count: randomInt(50, 600),
+                    reported_bookings: randomInt(400, 1500),
+                    reported_revenue_vnd: randomInt(800, 2800) * 1000000
+                },
+                trend: monthlyTrend(period => ({
+                    period,
+                    revenue_vnd: randomInt(200, 700) * 1000000,
+                    bookings: randomInt(80, 400),
+                    visitors: randomInt(300, 1500)
+                })),
+                highlights
+            };
+        }
+
+        // service_provider (mặc định)
         return {
-            period: {
-                type: periodType,
-                year,
-                from: `${year}-01-01`,
-                to: `${year}-05-28`
+            ...base,
+            summary: {
+                service_count: randomInt(5, 40),
+                active_service_count: randomInt(3, 30),
+                service_category_breakdown: [
+                    { category: 'accommodation', count: randomInt(1, 10) },
+                    { category: 'food', count: randomInt(1, 12) },
+                    { category: 'transport', count: randomInt(0, 6) }
+                ],
+                service_price_range: { min: 50000, max: 2500000 },
+                voucher_count: randomInt(2, 15),
+                active_voucher_count: randomInt(1, 10),
+                voucher_used_count: randomInt(10, 400),
+                voucher_redemption_rate: randomFloat(5.0, 75.0),
+                ocop_count: randomInt(0, 12),
+                active_ocop_count: randomInt(0, 8),
+                avg_ocop_stars: randomFloat(3.0, 5.0),
+                business_rating_avg: randomFloat(3.7, 4.9),
+                business_rating_count: randomInt(20, 350),
+                reported_revenue_vnd: randomInt(600, 2200) * 1000000
             },
-            business: bizInfo,
-            summary,
-            revenue_trend,
-            capacity_alerts
+            trend: monthlyTrend(period => ({
+                period,
+                revenue_vnd: randomInt(150, 600) * 1000000,
+                bookings: randomInt(60, 350),
+                visitors: randomInt(250, 1300)
+            }))
         };
     }
 

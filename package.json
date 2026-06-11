@@ -14,7 +14,9 @@
     "db:grant-capacity-read:travel-company": "node scripts/apply-sql-file.js migrations/20260602_grant_travel_company_capacity_read.sql",
     "db:normalize-capacity-roles": "node scripts/apply-sql-file.js migrations/20260602_normalize_capacity_role_permissions.sql",
     "db:normalize-spots-province-37": "node scripts/apply-sql-file.js migrations/20260602_normalize_spots_province_37.sql",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "db:add-chat-messages-tool-calls-latency": "node scripts/apply-sql-file.js migrations/20260611_add_chat_messages_tool_calls_latency.sql",
+    "test": "node --test \"src/services/dashboard/**/*.test.js\"",
+    "lint": "eslint ."
   },
   "keywords": [
     "daknong"
@@ -59,6 +61,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "eslint": "^8.57.1",
+    "fast-check": "^4.8.0",
     "nodemon": "^3.1.14"
   },
   "engines": {

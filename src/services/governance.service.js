@@ -1,6 +1,52 @@
 const GovernanceRepository = require('../models/repositories/governance.repository');
 const NotificationService = require('./notification.service');
+const DashboardResolver = require('./dashboard/dashboard-resolver');
+const SharedDashboardSection = require('./dashboard/shared-section');
 const { Api403Error, Api404Error, Api409Error } = require('../core/error.response');
+
+// ─── Helpers định dạng tiếng Việt cho thông báo báo cáo ─────────────────────────
+
+// Nhãn tiếng Việt cho loại kỳ báo cáo (tránh hiển thị 'monthly', 'weekly'...)
+const REPORT_TYPE_LABELS = {
+    daily: 'ngày',
+    weekly: 'tuần',
+    monthly: 'tháng',
+    quarterly: 'quý',
+    yearly: 'năm',
+    annual: 'năm',
+};
+
+const formatReportType = (type) => {
+    const key = String(type || '').trim().toLowerCase();
+    return REPORT_TYPE_LABELS[key] || (type ? String(type) : 'tổng hợp');
+};
+
+// Định dạng ngày dd/MM/yyyy theo vi-VN; chấp nhận Date | ISO string | 'YYYY-MM-DD'
+const formatReportDate = (value) => {
+    if (!value) return '';
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    });
+};
+
+// Xây tiêu đề thông báo báo cáo: ưu tiên tiêu đề sẵn có, nếu không thì dựng chuẩn
+const buildReportNotificationTitle = (report) => {
+    const existing = typeof report?.title === 'string' ? report.title.trim() : '';
+    if (existing) return existing;
+
+    const period = formatReportType(report?.report_type);
+    const from = formatReportDate(report?.period_from);
+    const to = formatReportDate(report?.period_to);
+
+    if (from && to) {
+        return `Báo cáo ${period} (${from} - ${to})`;
+    }
+    return `Báo cáo ${period}`;
+};
 
 class GovernanceService {
     static ADMIN_CODES = ['system_admin'];
@@ -339,9 +385,12 @@ class GovernanceService {
             throw new Api404Error('Không tìm thấy báo cáo để gửi');
         }
 
-        const title =
-            body.title_vi ||
-            `Báo cáo ${report.report_type} (${report.period_from} - ${report.period_to})`;
+        const title = body.title_vi || buildReportNotificationTitle(report);
+
+        const reportName =
+            typeof report.title === 'string' && report.title.trim()
+                ? report.title.trim()
+                : buildReportNotificationTitle(report);
 
         const notificationResult = await GovernanceRepository.sendDepartmentReportNotification({
             report,
@@ -349,7 +398,7 @@ class GovernanceService {
             title,
             body:
                 body.body_vi ||
-                `Báo cáo "${report.title}" đã sẵn sàng. Vui lòng truy cập hệ thống để xem chi tiết.`,
+                `"${reportName}" đã sẵn sàng. Vui lòng truy cập hệ thống để xem chi tiết.`,
             triggeredBy: user?.id || 'department',
         });
 
@@ -450,38 +499,49 @@ class GovernanceService {
     static async getBusinessDashboard(businessId, query, user) {
         this.ensureAccess(user, this.ENTERPRISE_CODES);
 
-        try {
-            const business = await GovernanceRepository.findBusinessById(businessId);
-            if (!business) {
-                throw new Api404Error('KhÃ´ng tÃ¬m tháº¥y doanh nghiá»‡p');
-            }
-
-            // NV-42: Doanh nghiệp chỉ xem dashboard của chính mình; admin không bị giới hạn
-            const isAdmin = this.ADMIN_CODES.includes(String(user?.role?.code || '').toLowerCase());
-            if (!isAdmin && business.owner_id !== user?.id) {
-                throw new Api403Error('Bạn không có quyền xem dashboard của doanh nghiệp này');
-            }
-
-            const { dateFrom, dateTo } = this.resolvePeriodRange(query.period, query.year);
-
-            const dashboard = await GovernanceRepository.getBusinessDashboardSummary(businessId, {
-                dateFrom,
-                dateTo,
-            });
-
-            return {
-                period: {
-                    type: query.period || 'month',
-                    year: Number(query.year) || new Date().getFullYear(),
-                    from: dateFrom,
-                    to: dateTo,
-                },
-                business,
-                ...dashboard,
-            };
-        } catch (error) {
-            throw error;
+        const business = await GovernanceRepository.findBusinessById(businessId);
+        if (!business) {
+            throw new Api404Error('Không tìm thấy doanh nghiệp');
         }
+
+        // NV-42: Doanh nghiệp chỉ xem dashboard của chính mình; admin không bị giới hạn.
+        const isAdmin = this.ADMIN_CODES.includes(String(user?.role?.code || '').toLowerCase());
+        if (!isAdmin && business.owner_id !== user?.id) {
+            throw new Api403Error('Bạn không có quyền xem dashboard của doanh nghiệp này');
+        }
+
+        const { dateFrom, dateTo } = this.resolvePeriodRange(query.period, query.year);
+        const period = {
+            type: query.period || 'month',
+            year: Number(query.year) || new Date().getFullYear(),
+            from: dateFrom,
+            to: dateTo,
+        };
+
+        // Strategy pattern: chọn variant theo role (hoặc business_type khi là admin),
+        // rồi uỷ quyền cho provider đặc trưng. Override `variant` chỉ áp dụng cho admin.
+        const variant = DashboardResolver.resolveVariant(
+            user,
+            business,
+            isAdmin ? query.variant : undefined
+        );
+        const provider = DashboardResolver.getProvider(variant);
+
+        const ctx = { businessId, business, period };
+
+        // Phần đặc trưng và phần dùng chung chạy song song (read-only).
+        const [specific, shared] = await Promise.all([
+            provider.build(ctx),
+            SharedDashboardSection.build(ctx),
+        ]);
+
+        return {
+            variant,
+            period,
+            business,
+            ...shared,
+            ...specific,
+        };
     }
 
     static async updateBusinessInfo(businessId, body, user) {

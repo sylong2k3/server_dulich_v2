@@ -514,6 +514,33 @@ const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'search_nearby_services',
+      description: 'Tìm KHÁCH SẠN / NHÀ HÀNG (cơ sở lưu trú & ăn uống) ở Ninh Bình. Gọi khi user hỏi "khách sạn", "chỗ ở", "resort", "homestay", "nhà hàng", "quán ăn", hoặc muốn tìm chỗ ăn/ở GẦN một điểm du lịch / trong lịch trình. Ưu tiên truyền near_spot={name|slug|id} để tìm quanh một điểm (server tự tra toạ độ thật) — chỉ dùng lat/lng khi user cho sẵn toạ độ.',
+      parameters: {
+        type: 'object',
+        properties: {
+          service_type: { type: 'string', enum: ['hotel', 'restaurant', 'all'], default: 'hotel', description: 'hotel = khách sạn/lưu trú, restaurant = nhà hàng/quán ăn, all = cả hai' },
+          near_spot: {
+            type: 'object',
+            description: 'Điểm trung tâm để tìm quanh. {slug} hoặc {id} hoặc {name}.',
+            properties: {
+              slug: { type: 'string' },
+              id: { type: 'string' },
+              name: { type: 'string' },
+            },
+          },
+          lat: { type: 'number', description: 'Vĩ độ trung tâm (chỉ khi user cho sẵn toạ độ)' },
+          lng: { type: 'number', description: 'Kinh độ trung tâm' },
+          radius_km: { type: 'number', default: 8, description: 'Bán kính tìm quanh tâm (km)' },
+          keyword: { type: 'string', description: 'Lọc thêm theo tên/địa chỉ' },
+          limit: { type: 'integer', default: 6, maximum: 20 },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_statistics_summary',
       description: '[manager] Thống kê tổng hợp: số điểm hoạt động, doanh nghiệp duyệt, số lễ hội sắp diễn ra.',
       parameters: {
@@ -887,6 +914,110 @@ const HANDLERS = {
     };
   },
 
+  async search_nearby_services(args = {}) {
+    const {
+      service_type = 'hotel',
+      near_spot,
+      lat: rawLat,
+      lng: rawLng,
+      radius_km = 8,
+      keyword,
+      limit = 6,
+    } = args;
+
+    // Resolve tâm tìm kiếm: ưu tiên near_spot (tra DB lấy toạ độ thật), rồi tới lat/lng.
+    let centerLat = Number.isFinite(Number(rawLat)) ? Number(rawLat) : null;
+    let centerLng = Number.isFinite(Number(rawLng)) ? Number(rawLng) : null;
+    let centerLabel = null;
+
+    if ((centerLat == null || centerLng == null) && near_spot && (near_spot.id || near_spot.slug || near_spot.name)) {
+      const spot = await findSpotDetail({
+        id: near_spot.id,
+        slug: near_spot.slug || (near_spot.name ? toSlugSearchText(near_spot.name) : null),
+      });
+      const ll = spot ? pickLngLat(spot) : null;
+      if (ll) {
+        centerLng = ll[0];
+        centerLat = ll[1];
+        centerLabel = firstValue(spot.name_vi, spot.name);
+      }
+    }
+
+    // Lọc danh mục theo loại dịch vụ (khách sạn/nhà hàng nằm trong tourism_spots,
+    // category con của "Cơ sở vật chất kỹ thuật" parent_id=3).
+    const HOTEL_FILTERS = [
+      `sc.name_vi ILIKE '%khách sạn%'`,
+      `sc.name_vi ILIKE '%nghỉ dưỡng%'`,
+      `sc.name_vi ILIKE '%lưu trú%'`,
+      `sc.name_vi ILIKE '%resort%'`,
+      `sc.name_vi ILIKE '%homestay%'`,
+    ];
+    const RESTAURANT_FILTERS = [
+      `sc.name_vi ILIKE '%nhà hàng%'`,
+      `sc.name_vi ILIKE '%quán ăn%'`,
+      `sc.name_vi ILIKE '%ẩm thực%'`,
+    ];
+    const catFilters = service_type === 'restaurant'
+      ? RESTAURANT_FILTERS
+      : service_type === 'all'
+        ? [...HOTEL_FILTERS, ...RESTAURANT_FILTERS]
+        : HOTEL_FILTERS;
+
+    const params = [];
+    const conds = [`s.status = 'active'`, `(${catFilters.join(' OR ')})`];
+
+    if (keyword) {
+      params.push(`%${keyword}%`);
+      conds.push(`(s.name_vi ILIKE $${params.length} OR s.address_vi ILIKE $${params.length})`);
+    }
+
+    let distanceSelect = '';
+    let orderBy = 'ORDER BY s.is_featured DESC, s.rating_avg DESC NULLS LAST';
+
+    if (centerLat != null && centerLng != null) {
+      params.push(centerLng, centerLat);
+      const lngIdx = params.length - 1;
+      const latIdx = params.length;
+      const distExpr = `ST_DistanceSphere(s.geom, ST_SetSRID(ST_MakePoint($${lngIdx}, $${latIdx}), 4326))`;
+      distanceSelect = `, ${distExpr} AS distance_m`;
+      params.push(Math.max(0.1, Number(radius_km) || 8) * 1000);
+      conds.push(`${distExpr} <= $${params.length}`);
+      orderBy = 'ORDER BY distance_m ASC';
+    }
+
+    params.push(Math.min(20, Math.max(1, Number(limit) || 6)));
+    const limitIdx = params.length;
+
+    const sql = `
+      SELECT s.id, s.slug, s.name_vi, s.name_en, sc.name_vi AS category_name,
+             s.rating_avg, s.rating_count, s.ticket_price_adult,
+             s.is_featured, s.has_vr_360, s.has_audio_guide,
+             s.address_vi, s.phone, s.website,
+             ST_Y(s.geom) AS lat, ST_X(s.geom) AS lng
+             ${distanceSelect}
+      FROM tourism_spots s
+      JOIN spot_categories sc ON sc.id = s.category_id
+      WHERE ${conds.join(' AND ')}
+      ${orderBy}
+      LIMIT $${limitIdx}`;
+
+    const { rows } = await pool.query(sql, params);
+    const items = rows.map(trimSpot);
+
+    return {
+      items,
+      count: items.length,
+      service_type,
+      center: centerLat != null ? { lat: centerLat, lng: centerLng, label: centerLabel } : null,
+      map_hint: {
+        spot_ids: items.map(i => i.id),
+        bounds: computeBounds(items),
+        layers: [service_type === 'restaurant' ? 'restaurant' : 'hotel'],
+        suggested_action: items.length > 1 ? 'fit_bounds' : items.length === 1 ? 'pan_and_popup' : null,
+      },
+    };
+  },
+
   async get_statistics_summary(args) {
     const { province_code, from_date, to_date } = args || {};
 
@@ -986,7 +1117,7 @@ function truncateText(text, max = 280) {
 
 function extractAttachableItems(toolName, result) {
   if (!result || result.error) return [];
-  const SPOT_TOOLS = new Set(['search_spots', 'get_spot_detail', 'get_random_spot']);
+  const SPOT_TOOLS = new Set(['search_spots', 'get_spot_detail', 'get_random_spot', 'search_nearby_services']);
   const FESTIVAL_TOOLS = new Set(['search_festivals']);
 
   let type;

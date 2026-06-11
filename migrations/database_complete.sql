@@ -884,6 +884,8 @@ CREATE TABLE IF NOT EXISTS ai_chat_messages (
     content     TEXT NOT NULL,
     map_actions JSONB,
     token_usage JSONB,
+    tool_calls  JSONB,
+    latency_ms  INTEGER,
     created_at  TIMESTAMP DEFAULT NOW()
 );
 

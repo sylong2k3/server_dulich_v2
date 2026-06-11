@@ -110,6 +110,7 @@ const listBusinessReportsQuerySchema = Joi.object({
 const businessDashboardQuerySchema = Joi.object({
     period: Joi.string().valid('month', 'quarter', 'year').default('year'),
     year: Joi.number().integer().min(2000).max(2100).default(new Date().getFullYear()),
+    variant: Joi.string().valid('spot_operator', 'travel_company', 'service_provider').optional(),
 });
 
 const updateBusinessInfoSchema = Joi.object({

@@ -30,25 +30,49 @@ const SYSTEM_PROMPTS = {
   ].join(' '),
 
   tourist: [
-    'Bạn là hướng dẫn viên du lịch ảo Ninh Bình — am hiểu, súc tích.',
+    'Bạn là "Nini" — người bạn đồng hành du lịch ảo am hiểu Ninh Bình, nói chuyện như một người bạn thật sự, không phải robot.',
+    '',
+    'TÍNH CÁCH & GIỌNG ĐIỆU:',
+    '• Thân thiện, tự nhiên, ấm áp — như đang nhắn tin với bạn bè, không cứng nhắc hay công thức.',
+    '• Dùng ngôn ngữ đời thường: "mình/bạn", "à", "nhỉ", "đó", "nè", "thật ra", "nói thật là"... hoàn toàn tự nhiên. Được bày tỏ cảm xúc thật.',
+    '• Hào hứng khi kể về điểm đẹp: "Ôi chỗ này đẹp lắm!". Đồng cảm khi user lo lắng: "Hiểu bạn, đi xa mà không biết chỗ nào ăn ngon thì căng thật".',
+    '• KHÔNG nói như sách giáo khoa, KHÔNG dùng ngôn ngữ hành chính, KHÔNG bắt đầu bằng "Certainly!", "Tất nhiên rồi!", "Dưới đây là..." hay các biểu thức máy móc.',
+    '• KHÔNG BAO GIờ nhắc đến "AI", "mô hình ngôn ngữ", "tôi là chatbot" — bạn chỉ là Nini.',
+    '',
+    'ĐỌC HIỂU NGỮ CẢNH HỘI THỪẠI (RẤT QUAN TRỌNG):',
+    '• NHỌ TOÀN BỘ những gì user đã chia sẻ trong cuộc trò chuyện: đi cùng ai, số lượng người, độ tuổi, ngân sách, sở thích, thời gian. Kết nối lại đầy đủ khi trả lời sau.',
+    '• Nếu user nói "đi với gia đình / trẻ em / con nhỏ / bé" → điều chỉnh gợi ý phù hợp với nhóm đó (an toàn, tiện lợi, giải trí trẻ em).',
+    '• Nếu user tỏ ra băn khoăn, lưỡng lự → hỏi thêm để hiểu hơn thay vì vội đưa ngay một đống thông tin.',
+    '• Nếu user chỉ trả lời ngắn "có", "ok", "được", "thích", "ư", "đi thôi" → hiểu là đồng ý, xử lý tiếp ngay, không hỏi lại.',
+    '• Phát hiện tâm trạng từ cách viết: user đang hào hứng → đáp lại sôi nổi; user đang mệt/phân vân → nhẹ nhàng hơn.',
+    '',
+    'CÁCH TRẢ LỜI:',
+    '• Chào hỏi/chitchat: Tự nhiên 1-2 câu, có thể hỏi thêm để hiểu mục đích chuyến đi.',
+    '• Thông tin điểm tham quan: Kể như đang tâm sự, có màu sắc cảm xúc — "Tràng An mình thấy đẹp nhất lúc sáng sớm, sương còn mờ trên núi, ngồi thuyền qua các hang đá mà cứ như lạc vào phim cổ trang vậy đó."',
+    '• Danh sách điểm: Giới thiệu mỗi chỗ 1-2 câu có hồn, KHÔNG chỉ liệt kê tên khô khan.',
+    '• Lịch trình: Rõ ràng theo ngày, có thêm mẹo thực tế ("Ngày 1 cố gắng dậy sớm nhé, Tràng An buổi sáng ít người hơn hẳn"). Lịch trình cho gia đình có trẻ em: nhấn mạnh điểm an toàn, không quá xa, có chỗ ăn uống tiện.',
+    '• KHÔNG nhắc lại địa chỉ, số điện thoại, website, toạ độ — UI đã có card riêng rồi.',
+    '• Khi không có dữ liệu: Thành thật nhẹ nhàng — "Hệ thống chưa có thông tin chỗ này, nhưng mình có thể gợi ý mấy chỗ tương tự nếu bạn muốn."',
     '',
     'TOOL — chỉ gọi khi CẦN data thật:',
     '• 1 ĐIỂM cụ thể có tên ("Tràng An", "Bái Đính"): gọi get_spot_detail(slug) trước; nếu fail thì search_spots(keyword) lấy id rồi get_spot_detail(id).',
-    '• NGẪU NHIÊN ("gợi ý ngẫu nhiên", "bất kỳ", "tuỳ bạn", "random", "không biết đi đâu"): gọi get_random_spot, KHÔNG dùng search_spots với keyword "ngẫu nhiên".',
-    '• DANH SÁCH/GẦN ĐÂY ("top điểm", "gần Hoa Lư"): search_spots. Khi user nói "nổi bật/đẹp nhất/top": truyền is_featured=true hoặc rating_min=4.',
-    '• LỄ HỘI → search_festivals. MÓN ĂN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news. LỊCH TRÌNH → suggest_itinerary.',
-    '• KHOẢNG CÁCH giữa các điểm có tên (vd "Tràng An đến Bái Đính"): get_route_between với points=[{slug|name}], KHÔNG tự đoán toạ độ.',
-    '• Server tự đính kèm map_actions để UI điều hướng bản đồ khi tool trả về toạ độ. Không nhắc, không mời, không hướng dẫn người dùng bấm nút hoặc thao tác bản đồ trong nội dung trả lời. Chỉ gọi navigate_map khi user yêu cầu rõ ràng (vd "zoom vào toạ độ X,Y").',
-    '• KHÔNG gọi tool cho chào hỏi, cảm ơn, câu hỏi kiến thức chung — trả lời trực tiếp.',
+    '• NGẪU NHIÊN ("bất kỳ", "tuỳ bạn", "random", "không biết đi đâu", "gợi ý đi"): gọi get_random_spot, KHÔNG dùng search_spots với keyword "ngẫu nhiên".',
+    '• DANH SÁCH/GẦN ĐÂY ("top điểm", "gần Hoa Lư"): search_spots. Từ "nổi bật/đẹp nhất/top": truyền is_featured=true hoặc rating_min=4.',
+    '• LỄ HỘI → search_festivals. MÓN ĂN/ĐẶC SẢN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news. LỊCH TRÌNH → suggest_itinerary.',
+    '• KHÁCH SẠN / CHỖ Ở / RESORT / HOMESTAY → search_nearby_services(service_type="hotel"). NHÀ HÀNG / QUÁN ĂN → search_nearby_services(service_type="restaurant"). Muốn tìm chỗ ăn/ở GẦN một điểm hoặc trong lịch trình vừa gợi ý: truyền near_spot={name} của điểm đó (server tự lấy toạ độ thật). KHÔNG dùng search_spots để tìm khách sạn/nhà hàng.',
+    '• Khi search_nearby_services TRẢ VỀ kết quả: tự tin giới thiệu các chỗ tìm được (UI đã hiện card tên/ảnh/đánh giá rồi) — mỗi chỗ 1 câu có hồn, gợi ý vì sao hợp. TUYỆT ĐỐI KHÔNG nói "mình chưa truy vấn được", "chưa có danh sách phòng/giá" — bạn VỪA tra ra dữ liệu thật. Nếu kết quả rỗng mới nói thành thật là chưa có.',
+    '• KHOẢNG CÁCH giữa các điểm có tên: get_route_between với points=[{slug|name}], KHÔNG tự đoán toạ độ.',
+    '• Server tự gắn map_actions để điều hướng bản đồ. KHÔNG nhắc user thao tác bản đồ trong nội dung chat.',
+    '• KHÔNG gọi tool cho chào hỏi, cảm ơn, kiến thức chung — trả lời tự nhiên trực tiếp.',
     '',
-    'TRẢ LỜI:',
-    '• Trả lời theo NGÔN NGỮ user dùng trong tin nhắn (Việt ↔ Anh). Không tự ép tiếng Việt nếu user hỏi bằng tiếng Anh.',
-    '• Chitchat/lời chào: 1-2 câu thân thiện.',
-    '• Sau get_spot_detail: 2-4 đoạn về lịch sử + trải nghiệm + mẹo, dùng **đậm** cho điểm nhấn. Bỏ qua đoạn không có thông tin.',
-    '• Sau search_spots (danh sách): giới thiệu mỗi điểm 1-2 câu, không bullet metadata.',
-    '• KHÔNG lặp lại địa chỉ chi tiết, giá vé, giờ mở, số điện thoại, website, toạ độ — UI đã có card riêng. Chỉ nói thoáng kiểu "mở cửa cả ngày", "giá vé phải chăng".',
-    '• Khi tool trả empty/error: nói thẳng "hiện chưa có dữ liệu trong hệ thống", có thể gợi ý chung 1 câu, TUYỆT ĐỐI KHÔNG nêu tên sản phẩm/điểm/lễ hội cụ thể như thể đó là kết quả từ DB.',
-    '• Không kết thúc bằng câu mời thao tác bản đồ; chỉ trả lời nội dung du lịch.',
+    'TƯƠNG TÁC TỰ NHIÊN — sau khi trả kết quả:',
+    '• Sau lịch trình (suggest_itinerary): Kết thúc bằng câu hỏi tự nhiên — kiểu "Bạn muốn mình tìm thêm khách sạn hay nhà hàng ngon cho chuyến đi không?"',
+    '• Sau danh sách điểm (search_spots ≥2): Hỏi nhẹ — "Bạn thấy điểm nào hợp nhất? Mình tìm thêm thông tin chi tiết hoặc nhà hàng gần đó cho nhé."',
+    '• Sau 1 điểm cụ thể (get_spot_detail / get_random_spot): Hỏi tiếp — "Bạn muốn mình tìm khách sạn gần đây không, hay cần lên lịch trình luôn?"',
+    '• Câu hỏi gọn, tự nhiên như bạn bè nhắn tin. KHÔNG hỏi nhiều câu cùng lúc. KHÔNG dùng bullet list cho câu hỏi follow-up.',
+    '• Nếu user vừa trả lời ("có", "tìm đi", "ư muốn") → xử lý ngay, không hỏi lại.',
+    '',
+    'NGÔN NGỮ: Trả lời bằng ngôn ngữ user dùng (Việt ↔ Anh). User nhắn tiếng Anh thì trả lời tiếng Anh.',
   ].join('\n'),
 };
 
@@ -83,6 +107,79 @@ function assertSessionAccess(session, { userId, anonymousId }) {
   return session;
 }
 
+// ─── Follow-up suggestion generator ─────────────────────────────────────────
+
+/**
+ * Sinh danh sách câu gợi ý nhanh (quick replies) dựa trên các tool đã gọi.
+ * Được hiển thị ở UI dưới dạng nút bấm để user tương tác tiếp.
+ */
+function buildFollowUpSuggestions(toolCallTrace, sessionType) {
+  if (sessionType !== 'tourist') return [];
+  if (!toolCallTrace || toolCallTrace.length === 0) return [];
+
+  const calledTools = new Set(toolCallTrace.filter(t => t.ok).map(t => t.name));
+
+  // Khách sạn / nhà hàng → gợi ý loại còn lại + lịch trình
+  if (calledTools.has('search_nearby_services')) {
+    return [
+      'Tìm nhà hàng ngon gần đây',
+      'Tìm khách sạn khác phù hợp hơn',
+      'Lập lịch trình cho chuyến đi',
+      'Xem điểm tham quan gần đó',
+    ];
+  }
+
+  // Lịch trình → gợi ý khách sạn, nhà hàng, ẩm thực
+  if (calledTools.has('suggest_itinerary')) {
+    return [
+      'Gợi ý khách sạn cho chuyến đi',
+      'Tìm nhà hàng ngon gần đó',
+      'Xem đặc sản ẩm thực Ninh Bình',
+      'Tính khoảng cách giữa các điểm',
+    ];
+  }
+
+  // Danh sách điểm → gợi ý chi tiết, khách sạn, nhà hàng
+  if (calledTools.has('search_spots')) {
+    return [
+      'Xem chi tiết điểm đầu tiên',
+      'Tìm khách sạn gần các điểm này',
+      'Gợi ý nhà hàng ngon gần đây',
+      'Lập lịch trình tham quan',
+    ];
+  }
+
+  // Chi tiết 1 điểm → gợi ý khách sạn, lịch trình, ẩm thực
+  if (calledTools.has('get_spot_detail') || calledTools.has('get_random_spot')) {
+    return [
+      'Tìm khách sạn gần đây',
+      'Tìm nhà hàng gần đây',
+      'Lập lịch trình 2 ngày 1 đêm',
+      'Gợi ý điểm tham quan khác',
+    ];
+  }
+
+  // Lễ hội → gợi ý điểm du lịch, ăn uống
+  if (calledTools.has('search_festivals')) {
+    return [
+      'Điểm tham quan gần lễ hội',
+      'Tìm khách sạn trong dịp lễ hội',
+      'Đặc sản ẩm thực địa phương',
+    ];
+  }
+
+  // Ẩm thực → gợi ý nhà hàng, điểm tham quan
+  if (calledTools.has('search_culinary')) {
+    return [
+      'Tìm nhà hàng phục vụ món này',
+      'Điểm du lịch nổi bật Ninh Bình',
+      'Lập lịch trình ẩm thực',
+    ];
+  }
+
+  return [];
+}
+
 // ─── OpenAI conversation loop ────────────────────────────────────────────────
 
 /**
@@ -102,7 +199,7 @@ async function runChatCompletion({ openaiMessages, tools, ctx }) {
     messages: openaiMessages,
     tools,
     tool_choice: tools.length ? 'auto' : 'none',
-    max_tokens: 1000,
+    max_completion_tokens: 1200,
   });
   tokenUsage = mergeUsage(tokenUsage, response.usage);
 
@@ -160,8 +257,9 @@ async function runChatCompletion({ openaiMessages, tools, ctx }) {
       model: OPENAI_MODEL,
       messages: openaiMessages,
       tools,
-      tool_choice: 'auto',
-      max_tokens: 1000,
+      // Sau khi đã chạy tool, buộc model tổng hợp kết quả thành văn bản (không gọi tiếp tool)
+      tool_choice: 'none',
+      max_completion_tokens: 2000,
     });
     tokenUsage = mergeUsage(tokenUsage, response.usage);
     assistantMessage = pickAssistant(response);
@@ -442,6 +540,9 @@ class ChatbotService {
         })
       );
 
+      // Sinh gợi ý tương tác nhanh dựa trên tool đã gọi
+      const followUpSuggestions = buildFollowUpSuggestions(toolCallTrace, session.session_type);
+
       const saved = await ChatbotRepository.saveMessage({
         session_id: sessionId,
         role: 'assistant',
@@ -452,7 +553,7 @@ class ChatbotService {
         latency_ms: Date.now() - startedAt,
       });
 
-      return { message: saved, map_actions: mapActions };
+      return { message: saved, map_actions: mapActions, follow_up_suggestions: followUpSuggestions };
     } catch (err) {
       // Lỗi cấu hình API key → fallback friendly message
       if (err instanceof MissingOpenAIKeyError) {

@@ -1003,6 +1003,247 @@ class GovernanceRepository {
             top_actions: auditRes.rows,
         };
     }
+
+    // ==================== ROLE-SPECIFIC DASHBOARD QUERIES ====================
+    // Tất cả truy vấn dưới đây CHỈ ĐỌC (read-only) và tham số hoá hoàn toàn.
+
+    /**
+     * Khối dùng chung: tổng hợp business_activity_reports trong khoảng [dateFrom, dateTo].
+     * Luôn trả về đúng 1 object (aggregate không GROUP BY).
+     */
+    static async getReportedMetricsSummary(businessId, { dateFrom, dateTo }) {
+        const sql = `
+      SELECT
+        COALESCE(SUM(total_revenue_vnd), 0) AS total_revenue_vnd,
+        COALESCE(SUM(total_bookings), 0) AS total_bookings,
+        COALESCE(SUM(total_visitors), 0) AS total_visitors,
+        ROUND(COALESCE(AVG(avg_capacity_pct), 0)::numeric, 2) AS avg_capacity_pct,
+        COUNT(*) AS report_count
+      FROM business_activity_reports
+      WHERE business_id = $1
+        AND period_from >= $2::date
+        AND period_to <= $3::date
+    `;
+        const { rows } = await query(sql, [businessId, dateFrom, dateTo]);
+        return rows[0] || {};
+    }
+
+    // -------------------- spot_operator --------------------
+
+    /**
+     * Thống kê điểm tham quan gắn với doanh nghiệp qua services.spot_id.
+     */
+    static async getSpotOperatorStats(businessId) {
+        const sql = `
+      WITH managed_spots AS (
+        SELECT DISTINCT spot_id
+        FROM services
+        WHERE business_id = $1 AND spot_id IS NOT NULL
+      ),
+      capacity AS (
+        SELECT
+          COALESCE(SUM(vc.visitor_count), 0)::int AS current_visitors,
+          ROUND(COALESCE(AVG(vc.capacity_pct), 0)::numeric, 2) AS avg_capacity_pct,
+          ROUND(COALESCE(MAX(vc.capacity_pct), 0)::numeric, 2) AS peak_capacity_pct,
+          COUNT(*) FILTER (WHERE vc.status IN ('near_full', 'overloaded'))::int AS capacity_alert_count
+        FROM managed_spots ms
+        INNER JOIN v_current_capacity vc ON vc.spot_id = ms.spot_id
+      ),
+      spot_meta AS (
+        SELECT
+          COUNT(*)::int AS managed_spot_count,
+          MIN(ts.ticket_price_adult) AS ticket_price_min,
+          MAX(ts.ticket_price_adult) AS ticket_price_max,
+          COUNT(*) FILTER (WHERE ts.has_vr_360 = TRUE)::int AS feature_vr360,
+          COUNT(*) FILTER (WHERE ts.has_ar_support = TRUE)::int AS feature_ar,
+          COUNT(*) FILTER (WHERE ts.has_audio_guide = TRUE)::int AS feature_audio
+        FROM managed_spots ms
+        INNER JOIN tourism_spots ts ON ts.id = ms.spot_id
+      ),
+      rating AS (
+        SELECT
+          ROUND(COALESCE(AVG(r.stars) FILTER (WHERE r.status = 'published'), 0)::numeric, 2) AS spot_rating_avg,
+          COUNT(*) FILTER (WHERE r.status = 'published')::int AS spot_rating_count
+        FROM managed_spots ms
+        INNER JOIN ratings r ON r.spot_id = ms.spot_id
+      )
+      SELECT *
+      FROM spot_meta
+      CROSS JOIN capacity
+      CROSS JOIN rating
+    `;
+        const { rows } = await query(sql, [businessId]);
+        return rows[0] || {};
+    }
+
+    /**
+     * Chuỗi lượt khách theo tháng cho các spot do doanh nghiệp quản lý.
+     */
+    static async getSpotVisitTrend(businessId, { dateFrom, dateTo }) {
+        const sql = `
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', uvh.visited_at), 'YYYY-MM') AS period,
+        COUNT(*)::int AS visits
+      FROM user_visit_history uvh
+      INNER JOIN (
+        SELECT DISTINCT spot_id
+        FROM services
+        WHERE business_id = $1 AND spot_id IS NOT NULL
+      ) ms ON ms.spot_id = uvh.spot_id
+      WHERE uvh.visited_at >= $2::date
+        AND uvh.visited_at < ($3::date + INTERVAL '1 day')
+      GROUP BY period
+      ORDER BY period ASC
+    `;
+        const { rows } = await query(sql, [businessId, dateFrom, dateTo]);
+        return rows;
+    }
+
+    /**
+     * Top điểm tham quan theo sức chứa hiện tại.
+     */
+    static async getTopSpotsByCapacity(businessId, limit = 5) {
+        const sql = `
+      SELECT
+        vc.spot_id,
+        vc.name_vi,
+        vc.visitor_count,
+        vc.capacity_pct,
+        vc.status,
+        vc.recorded_at
+      FROM (
+        SELECT DISTINCT spot_id
+        FROM services
+        WHERE business_id = $1 AND spot_id IS NOT NULL
+      ) ms
+      INNER JOIN v_current_capacity vc ON vc.spot_id = ms.spot_id
+      ORDER BY vc.capacity_pct DESC NULLS LAST
+      LIMIT $2
+    `;
+        const { rows } = await query(sql, [businessId, limit]);
+        return rows;
+    }
+
+    // -------------------- travel_company --------------------
+
+    static async getTravelCompanyStats(businessId) {
+        const sql = `
+      SELECT
+        COUNT(*)::int AS tour_count,
+        COUNT(*) FILTER (WHERE status IN ('published', 'active'))::int AS active_tour_count,
+        COUNT(*) FILTER (WHERE is_featured = TRUE)::int AS featured_tour_count,
+        ROUND(COALESCE(AVG(price_from_vnd) FILTER (WHERE status IN ('published', 'active')), 0)::numeric, 0) AS avg_tour_price_vnd,
+        COALESCE(SUM(max_guests) FILTER (WHERE status IN ('published', 'active')), 0)::int AS total_listed_capacity,
+        ROUND(COALESCE(AVG(duration_days) FILTER (WHERE status IN ('published', 'active')), 0)::numeric, 2) AS avg_tour_duration_days,
+        ROUND(COALESCE(AVG(rating_avg) FILTER (WHERE rating_count > 0), 0)::numeric, 2) AS tour_rating_avg,
+        COALESCE(SUM(rating_count), 0)::int AS tour_rating_count
+      FROM tour_packages
+      WHERE business_id = $1
+    `;
+        const { rows } = await query(sql, [businessId]);
+        return rows[0] || {};
+    }
+
+    /**
+     * Chuỗi booking/doanh thu theo tháng (dữ liệu doanh nghiệp tự báo cáo).
+     */
+    static async getReportedTrend(businessId, { dateFrom, dateTo }) {
+        const sql = `
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', period_from::timestamp), 'YYYY-MM') AS period,
+        COALESCE(SUM(total_revenue_vnd), 0) AS revenue_vnd,
+        COALESCE(SUM(total_bookings), 0) AS bookings,
+        COALESCE(SUM(total_visitors), 0) AS visitors
+      FROM business_activity_reports
+      WHERE business_id = $1
+        AND period_from >= $2::date
+        AND period_to <= $3::date
+      GROUP BY period
+      ORDER BY period ASC
+    `;
+        const { rows } = await query(sql, [businessId, dateFrom, dateTo]);
+        return rows;
+    }
+
+    static async getTopTours(businessId, limit = 5) {
+        const sql = `
+      SELECT
+        id,
+        name_vi,
+        rating_avg,
+        rating_count,
+        price_from_vnd,
+        status,
+        is_featured
+      FROM tour_packages
+      WHERE business_id = $1
+      ORDER BY rating_avg DESC NULLS LAST, rating_count DESC NULLS LAST
+      LIMIT $2
+    `;
+        const { rows } = await query(sql, [businessId, limit]);
+        return rows;
+    }
+
+    // -------------------- service_provider --------------------
+
+    static async getServiceProviderStats(businessId) {
+        const sql = `
+      WITH service_stats AS (
+        SELECT
+          COUNT(*)::int AS service_count,
+          COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active_service_count,
+          MIN(price_from) AS service_price_min,
+          MAX(price_to) AS service_price_max
+        FROM services
+        WHERE business_id = $1
+      ),
+      voucher_stats AS (
+        SELECT
+          COUNT(*)::int AS voucher_count,
+          COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active_voucher_count,
+          COALESCE(SUM(used_count), 0)::int AS voucher_used_count,
+          COALESCE(SUM(max_uses), 0)::int AS voucher_max_uses
+        FROM vouchers
+        WHERE business_id = $1
+      ),
+      ocop_stats AS (
+        SELECT
+          COUNT(*)::int AS ocop_count,
+          COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active_ocop_count,
+          ROUND(COALESCE(AVG(star_rating) FILTER (WHERE is_active = TRUE), 0)::numeric, 2) AS avg_ocop_stars
+        FROM ocop_products
+        WHERE business_id = $1
+      ),
+      rating_stats AS (
+        SELECT
+          ROUND(COALESCE(AVG(stars) FILTER (WHERE status = 'published'), 0)::numeric, 2) AS business_rating_avg,
+          COUNT(*) FILTER (WHERE status = 'published')::int AS business_rating_count
+        FROM ratings
+        WHERE business_id = $1
+      )
+      SELECT *
+      FROM service_stats
+      CROSS JOIN voucher_stats
+      CROSS JOIN ocop_stats
+      CROSS JOIN rating_stats
+    `;
+        const { rows } = await query(sql, [businessId]);
+        return rows[0] || {};
+    }
+
+    static async getServiceCategoryBreakdown(businessId) {
+        const sql = `
+      SELECT
+        COALESCE(NULLIF(TRIM(category), ''), 'uncategorized') AS category,
+        COUNT(*)::int AS count
+      FROM services
+      WHERE business_id = $1
+      GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'uncategorized')
+      ORDER BY count DESC, category ASC
+    `;
+        const { rows } = await query(sql, [businessId]);
+        return rows;
+    }
 }
 
 module.exports = GovernanceRepository;
