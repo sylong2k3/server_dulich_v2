@@ -50,7 +50,7 @@ Controller.getBusinessDashboard
 
 Các truy vấn SQL mới được thêm vào `GovernanceRepository` (đều **tham số hoá** và **read-only**):
 `getReportedMetricsSummary`, `getSpotOperatorStats`, `getSpotVisitTrend`, `getTopSpotsByCapacity`,
-`getTravelCompanyStats`, `getReportedTrend`, `getTopTours`, `getServiceProviderStats`,
+`getVrSpots`, `getTravelCompanyStats`, `getReportedTrend`, `getTopTours`, `getServiceProviderStats`,
 `getServiceCategoryBreakdown`.
 
 ## 3. Quy tắc resolve variant
@@ -71,7 +71,7 @@ Hàm là pure (không truy vấn DB), không bao giờ trả `null`/`undefined`.
 ### `spot_operator` — `summary`
 `managed_spot_count`, `current_visitors`, `avg_capacity_pct`, `peak_capacity_pct`, `capacity_alert_count`,
 `spot_rating_avg`, `spot_rating_count`, `ticket_price_range { min, max }`,
-`experience_features { vr360, ar, audio }`.
+`experience_features { vr360, ar, audio }`, `vr_spots [{ spot_id, name_vi, slug, active_scene_count }]`.
 Kèm `trend` (lượt khách theo tháng từ `user_visit_history`) và `highlights` (top spot theo sức chứa).
 
 ### `travel_company` — `summary`
@@ -172,7 +172,7 @@ Gọi: `GET /enterprise/businesses/:businessId/dashboard?period=month&year=2026`
     "avg_capacity_pct": 81.5,
     "report_count": 5,
     "source": "business_activity_reports",
-    "note": "Số liệu doanh nghiệp tự báo cáo."
+    "note": "Số liệu doanh thu, lượt đặt và lượt khách là dữ liệu doanh nghiệp tự báo cáo trong cơ sở dữ liệu, không phải dữ liệu giao dịch phát sinh."
   },
   "summary": {
     "managed_spot_count": 4,
@@ -183,7 +183,11 @@ Gọi: `GET /enterprise/businesses/:businessId/dashboard?period=month&year=2026`
     "spot_rating_avg": 4.6,
     "spot_rating_count": 312,
     "ticket_price_range": { "min": 50000, "max": 250000 },
-    "experience_features": { "vr360": 2, "ar": 1, "audio": 3 }
+    "experience_features": { "vr360": 2, "ar": 1, "audio": 3 },
+    "vr_spots": [
+      { "spot_id": "s-001", "name_vi": "Khu sinh thái Tràng An", "slug": "khu-sinh-thai-trang-an", "active_scene_count": 8 },
+      { "spot_id": "s-003", "name_vi": "Chùa Bái Đính", "slug": "chua-bai-dinh", "active_scene_count": 5 }
+    ]
   },
   "trend": [
     { "period": "2026-01", "visits": 1820 },
@@ -221,7 +225,7 @@ Gọi: `GET /enterprise/businesses/:businessId/dashboard?period=month&year=2026`
     "avg_capacity_pct": 78.0,
     "report_count": 5,
     "source": "business_activity_reports",
-    "note": "Số liệu doanh nghiệp tự báo cáo."
+    "note": "Số liệu doanh thu, lượt đặt và lượt khách là dữ liệu doanh nghiệp tự báo cáo trong cơ sở dữ liệu, không phải dữ liệu giao dịch phát sinh."
   },
   "summary": {
     "tour_count": 18,
@@ -271,7 +275,7 @@ Gọi: `GET /enterprise/businesses/:businessId/dashboard?period=month&year=2026`
     "avg_capacity_pct": 82.3,
     "report_count": 5,
     "source": "business_activity_reports",
-    "note": "Số liệu doanh nghiệp tự báo cáo."
+    "note": "Số liệu doanh thu, lượt đặt và lượt khách là dữ liệu doanh nghiệp tự báo cáo trong cơ sở dữ liệu, không phải dữ liệu giao dịch phát sinh."
   },
   "summary": {
     "service_count": 22,

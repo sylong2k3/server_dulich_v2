@@ -16,10 +16,11 @@ const SpotOperatorDashboardProvider = {
         const { businessId, period } = ctx;
         const range = { dateFrom: period.from, dateTo: period.to };
 
-        const [stats, trendRows, topRows] = await Promise.all([
+        const [stats, trendRows, topRows, vrSpotRows] = await Promise.all([
             safeQuery('getSpotOperatorStats', GovernanceRepository.getSpotOperatorStats(businessId), {}),
             safeQuery('getSpotVisitTrend', GovernanceRepository.getSpotVisitTrend(businessId, range), []),
             safeQuery('getTopSpotsByCapacity', GovernanceRepository.getTopSpotsByCapacity(businessId, 5), []),
+            safeQuery('getVrSpots', GovernanceRepository.getVrSpots(businessId), []),
         ]);
 
         const summary = {
@@ -39,6 +40,12 @@ const SpotOperatorDashboardProvider = {
                 ar: toNonNegativeNumber(stats.feature_ar),
                 audio: toNonNegativeNumber(stats.feature_audio),
             },
+            vr_spots: (Array.isArray(vrSpotRows) ? vrSpotRows : []).map((row) => ({
+                spot_id: row.spot_id,
+                name_vi: row.name_vi,
+                slug: row.slug || null,
+                active_scene_count: toNonNegativeNumber(row.active_scene_count),
+            })),
         };
 
         const trend = (Array.isArray(trendRows) ? trendRows : []).map((row) => ({

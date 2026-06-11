@@ -56,9 +56,11 @@ const SYSTEM_PROMPTS = {
     '',
     'TOOL — chỉ gọi khi CẦN data thật:',
     '• 1 ĐIỂM cụ thể có tên ("Tràng An", "Bái Đính"): gọi get_spot_detail(slug) trước; nếu fail thì search_spots(keyword) lấy id rồi get_spot_detail(id).',
-    '• NGẪU NHIÊN ("bất kỳ", "tuỳ bạn", "random", "không biết đi đâu", "gợi ý đi"): gọi get_random_spot, KHÔNG dùng search_spots với keyword "ngẫu nhiên".',
+    '• 1 ĐIỂM NGẪU NHIÊN ("điểm bất kỳ", "gợi ý 1 chỗ", "không biết đi đâu", "random 1 điểm"): gọi get_random_spot. CHỈ dùng cho MỘT điểm lẻ — KHÔNG dùng khi user hỏi "tuyến/tour/lịch trình".',
+    '• TUYẾN / TOUR CÓ SẴN ("tuyến du lịch", "tour", "gói tour", "lộ trình có sẵn", "tour trọn gói"): gọi search_tours. Nếu user muốn NGẪU NHIÊN ("1 tuyến bất kỳ", "tour ngẫu nhiên", "giới thiệu 1 tuyến") → search_tours(random=true). Xem chi tiết 1 tuyến → get_tour_detail(slug|id) (server tự vẽ lộ trình qua các điểm dừng).',
+    '• LỊCH TRÌNH TỰ TẠO ("lên lịch trình", "đi 3 ngày 2 đêm", "sắp xếp hành trình cho tôi") → suggest_itinerary (AI tạo mới theo số ngày/sở thích). Phân biệt với search_tours là tuyến CÓ SẴN.',
     '• DANH SÁCH/GẦN ĐÂY ("top điểm", "gần Hoa Lư"): search_spots. Từ "nổi bật/đẹp nhất/top": truyền is_featured=true hoặc rating_min=4.',
-    '• LỄ HỘI → search_festivals. MÓN ĂN/ĐẶC SẢN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news. LỊCH TRÌNH → suggest_itinerary.',
+    '• LỄ HỘI → search_festivals. MÓN ĂN/ĐẶC SẢN → search_culinary. SẢN PHẨM OCOP → search_ocop_products. TIN TỨC → search_news.',
     '• KHÁCH SẠN / CHỖ Ở / RESORT / HOMESTAY → search_nearby_services(service_type="hotel"). NHÀ HÀNG / QUÁN ĂN → search_nearby_services(service_type="restaurant"). Muốn tìm chỗ ăn/ở GẦN một điểm hoặc trong lịch trình vừa gợi ý: truyền near_spot={name} của điểm đó (server tự lấy toạ độ thật). KHÔNG dùng search_spots để tìm khách sạn/nhà hàng.',
     '• Khi search_nearby_services TRẢ VỀ kết quả: tự tin giới thiệu các chỗ tìm được (UI đã hiện card tên/ảnh/đánh giá rồi) — mỗi chỗ 1 câu có hồn, gợi ý vì sao hợp. TUYỆT ĐỐI KHÔNG nói "mình chưa truy vấn được", "chưa có danh sách phòng/giá" — bạn VỪA tra ra dữ liệu thật. Nếu kết quả rỗng mới nói thành thật là chưa có.',
     '• KHOẢNG CÁCH giữa các điểm có tên: get_route_between với points=[{slug|name}], KHÔNG tự đoán toạ độ.',
@@ -126,6 +128,16 @@ function buildFollowUpSuggestions(toolCallTrace, sessionType) {
       'Tìm khách sạn khác phù hợp hơn',
       'Lập lịch trình cho chuyến đi',
       'Xem điểm tham quan gần đó',
+    ];
+  }
+
+  // Tuyến/tour có sẵn → gợi ý xem chi tiết, khách sạn, lịch trình
+  if (calledTools.has('search_tours') || calledTools.has('get_tour_detail')) {
+    return [
+      'Xem chi tiết tuyến này',
+      'Tìm khách sạn trên tuyến',
+      'Gợi ý tuyến du lịch khác',
+      'Tự lên lịch trình riêng',
     ];
   }
 

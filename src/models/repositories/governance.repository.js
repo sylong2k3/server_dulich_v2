@@ -1077,6 +1077,33 @@ class GovernanceRepository {
     }
 
     /**
+     * Danh sách cụ thể các điểm tham quan do doanh nghiệp quản lý đã có VR 360.
+     * Kèm số scene 360 đang hoạt động để hiển thị rõ trên dashboard.
+     */
+    static async getVrSpots(businessId) {
+        const sql = `
+      WITH managed_spots AS (
+        SELECT DISTINCT spot_id
+        FROM services
+        WHERE business_id = $1 AND spot_id IS NOT NULL
+      )
+      SELECT
+        ts.id   AS spot_id,
+        ts.name_vi,
+        ts.slug,
+        COUNT(afs.id) FILTER (WHERE afs.is_active = TRUE)::int AS active_scene_count
+      FROM managed_spots ms
+      INNER JOIN tourism_spots ts ON ts.id = ms.spot_id
+      LEFT JOIN aframe_scenes afs ON afs.spot_id = ts.id
+      WHERE ts.has_vr_360 = TRUE
+      GROUP BY ts.id, ts.name_vi, ts.slug
+      ORDER BY active_scene_count DESC, ts.name_vi ASC
+    `;
+        const { rows } = await query(sql, [businessId]);
+        return rows;
+    }
+
+    /**
      * Chuỗi lượt khách theo tháng cho các spot do doanh nghiệp quản lý.
      */
     static async getSpotVisitTrend(businessId, { dateFrom, dateTo }) {

@@ -28,6 +28,7 @@ const OcopService = require('./ocop.service');
 const NewsService = require('./news.service');
 const VlogService = require('./vlog.service');
 const ItineraryAiService = require('./itinerary-ai.service');
+const TourService = require('./tour.service');
 const MapMeasureService = require('./map-measure.service');
 const { cacheOrFetch } = require('../utils/cache.utils');
 
@@ -232,6 +233,42 @@ function trimNews(n) {
   return {
     id: n.id, title: n.title, slug: n.slug, excerpt: n.excerpt,
     cover_image_url: n.cover_image_url, published_at: n.published_at,
+  };
+}
+
+function trimTour(t) {
+  return {
+    id: t.id,
+    slug: t.slug,
+    name_vi: firstValue(t.name, t.name_vi),
+    province: t.province_name || null,
+    business_name: t.business_name || null,
+    duration_days: t.duration_days ?? null,
+    price_from_vnd: t.price_from_vnd ?? null,
+    max_guests: t.max_guests ?? null,
+    rating_avg: t.rating_avg ?? null,
+    rating_count: t.rating_count ?? 0,
+    is_featured: !!t.is_featured,
+    cover_image_url: t.cover_image_url || null,
+    start_location: t.start_location_vi || null,
+    end_location: t.end_location_vi || null,
+  };
+}
+
+/** Chuyển một stop của tour (có geom GeoJSON) thành card điểm dừng có toạ độ. */
+function tourStopToPoint(stop) {
+  const ll = pickLngLat(stop);
+  // Bỏ điểm dừng thiếu toạ độ hoặc dùng placeholder POINT(0 0).
+  if (!ll || (ll[0] === 0 && ll[1] === 0)) return null;
+  return {
+    id: stop.spot_id || stop.id,
+    type: 'spot',
+    name: firstValue(stop.spot_name, stop.title_vi, 'Điểm dừng'),
+    slug: null,
+    lng: ll[0],
+    lat: ll[1],
+    day_number: stop.day_number ?? null,
+    stop_order: stop.stop_order ?? null,
   };
 }
 
@@ -465,8 +502,40 @@ const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'search_tours',
+      description: 'Tìm TUYẾN / TOUR du lịch CÓ SẴN trong hệ thống (gói tour do doanh nghiệp xây sẵn, gồm nhiều điểm dừng). Gọi khi user hỏi "tuyến du lịch", "tour", "gói tour", "lộ trình có sẵn", "tour trọn gói". Muốn 1 tuyến NGẪU NHIÊN ("tuyến bất kỳ", "tour ngẫu nhiên", "gợi ý 1 tuyến") → truyền random=true. KHÁC với suggest_itinerary (AI tự sinh lịch trình mới) và get_random_spot (1 điểm lẻ).',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: { type: 'string', description: 'Từ khoá tên/mô tả tuyến' },
+          is_featured: { type: 'boolean', description: 'Chỉ lấy tuyến nổi bật' },
+          random: { type: 'boolean', description: 'true = chọn ngẫu nhiên 1 tuyến', default: false },
+          duration_days: { type: 'integer', description: 'Lọc theo số ngày của tuyến' },
+          price_max: { type: 'integer', description: 'Giá tối đa (VNĐ) cho 1 khách' },
+          limit: { type: 'integer', default: 6, maximum: 20 },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_tour_detail',
+      description: 'Lấy chi tiết một TUYẾN / TOUR có sẵn theo id hoặc slug: mô tả, số ngày, giá, các điểm dừng theo từng ngày. Server tự vẽ lộ trình (draw_route) các điểm dừng lên bản đồ.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'UUID của tuyến' },
+          slug: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'suggest_itinerary',
-      description: 'Sinh lịch trình du lịch nhiều ngày bằng AI. CHỈ GỌI khi user muốn lịch trình cụ thể (1-14 ngày).',
+      description: 'Sinh lịch trình du lịch nhiều ngày bằng AI (TẠO MỚI theo yêu cầu, không phải tour có sẵn). CHỈ GỌI khi user muốn lịch trình cụ thể (1-14 ngày). Nếu user muốn TUYẾN/TOUR CÓ SẴN thì dùng search_tours.',
       parameters: {
         type: 'object',
         required: ['num_days'],
@@ -854,9 +923,86 @@ const HANDLERS = {
     };
   },
 
+  async search_tours(args = {}) {
+    const { keyword, is_featured, random = false, duration_days, price_max, limit = 6 } = args;
+    const cleanLimit = Math.min(20, Math.max(1, Number(limit) || 6));
+    // Khi cần ngẫu nhiên thì lấy rộng hơn rồi tự bốc 1 tuyến.
+    const fetchLimit = random ? 30 : cleanLimit;
+
+    const { tours = [] } = await TourService.getAll({
+      page: 1,
+      limit: fetchLimit,
+      search: keyword,
+      is_featured,
+      sortBy: 'rating_avg',
+      sortOrder: 'DESC',
+    });
+
+    let rows = tours;
+    if (duration_days != null) {
+      rows = rows.filter((t) => Number(t.duration_days) === Number(duration_days));
+    }
+    if (price_max != null) {
+      rows = rows.filter((t) => t.price_from_vnd == null || Number(t.price_from_vnd) <= Number(price_max));
+    }
+
+    if (!rows.length) return { items: [], count: 0 };
+
+    if (random) {
+      rows = [rows[Math.floor(Math.random() * rows.length)]];
+    } else {
+      rows = rows.slice(0, cleanLimit);
+    }
+
+    const items = rows.map(trimTour);
+    return { items, count: items.length };
+  },
+
+  async get_tour_detail(args = {}) {
+    const { id, slug } = args;
+    if (!id && !slug) return { error: 'Cần truyền id hoặc slug' };
+
+    let tour = null;
+    try {
+      tour = id ? await TourService.getById(id) : await TourService.getBySlug(slug);
+    } catch (_) {
+      tour = null;
+    }
+    if (!tour) return { error: 'Không tìm thấy tuyến du lịch' };
+
+    const stops = Array.isArray(tour.stops) ? tour.stops : [];
+    const stopPoints = stops.map(tourStopToPoint).filter(Boolean);
+    const coordinates = stopPoints.map((p) => [p.lng, p.lat]);
+
+    const item = {
+      ...trimTour(tour),
+      description_vi: truncateText(firstValue(tour.description_vi, tour.description), 500),
+      includes: tour.includes || null,
+      excludes: tour.excludes || null,
+      total_stops: stops.length,
+      stops: stops.map((s) => ({
+        day_number: s.day_number,
+        stop_order: s.stop_order,
+        name: firstValue(s.spot_name, s.title_vi),
+      })),
+    };
+
+    return {
+      item,
+      stop_points: stopPoints,
+      map_action: coordinates.length >= 2
+        ? { action: 'draw_route', coordinates, label: item.name_vi }
+        : null,
+      map_hint: {
+        spot_ids: stopPoints.map((p) => p.id).filter(Boolean),
+        bounds: computeBounds(stopPoints),
+        suggested_action: coordinates.length >= 2 ? 'draw_route' : 'fit_bounds',
+      },
+    };
+  },
+
   async get_route_between(args) {
     const { points, coordinates: rawCoords, unit = 'km' } = args;
-
     // Ưu tiên resolve theo points (slug/id/name) để tránh model tự đoán toạ độ.
     let coordinates = Array.isArray(rawCoords) ? rawCoords.slice() : [];
     const resolvedItems = [];
@@ -1117,6 +1263,26 @@ function truncateText(text, max = 280) {
 
 function extractAttachableItems(toolName, result) {
   if (!result || result.error) return [];
+
+  // Tuyến/tour: gắn các điểm dừng (đã chuẩn hoá toạ độ) lên bản đồ.
+  if (toolName === 'get_tour_detail') {
+    const pts = Array.isArray(result.stop_points) ? result.stop_points : [];
+    return pts
+      .filter((p) => p && p.lat != null && p.lng != null)
+      .map((p) => ({
+        id: p.id,
+        type: 'spot',
+        name: p.name || '(không tên)',
+        slug: p.slug || null,
+        lat: Number(p.lat),
+        lng: Number(p.lng),
+        image_url: null,
+        rating_avg: null,
+        rating_count: null,
+        is_featured: false,
+      }));
+  }
+
   const SPOT_TOOLS = new Set(['search_spots', 'get_spot_detail', 'get_random_spot', 'search_nearby_services']);
   const FESTIVAL_TOOLS = new Set(['search_festivals']);
 
@@ -1175,7 +1341,8 @@ async function callTool(name, args, ctx = {}) {
   if (!handler) return { result: { error: `Unknown tool: ${name}` } };
   try {
     const result = await handler(args || {}, ctx);
-    const mapAction = name === 'navigate_map' && result?.map_action ? result.map_action : null;
+    // navigate_map và get_tour_detail (draw_route) trả map_action trực tiếp.
+    const mapAction = result?.map_action || null;
     const attachItems = extractAttachableItems(name, result);
     return { result, mapAction, attachItems };
   } catch (err) {
