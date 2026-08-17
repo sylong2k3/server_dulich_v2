@@ -150,10 +150,23 @@ class SpotRepository {
 
     const capacitySelect = capacity
       ? `,
-        cap.visitor_count  AS current_visitor_count,
-        cap.capacity_pct   AS current_capacity_pct,
-        cap.status         AS capacity_status,
-        cap.recorded_at    AS capacity_recorded_at,
+        cap.visitor_count AS current_visitor_count,
+        CASE
+          WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cap.visitor_count IS NOT NULL
+            THEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2)::numeric(5,2)
+          ELSE cap.capacity_pct
+        END AS current_capacity_pct,
+        CASE
+          WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cap.visitor_count IS NOT NULL THEN
+            CASE
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 100 THEN 'overloaded'
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 85 THEN 'near_full'
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 60 THEN 'busy'
+              ELSE 'normal'
+            END
+          ELSE cap.status
+        END::varchar(20) AS capacity_status,
+        cap.recorded_at   AS capacity_recorded_at,
         ts.alert_threshold_pct`
       : '';
 
@@ -379,10 +392,24 @@ class SpotRepository {
         p.code        AS province_code,
         ${localizedSQL(lang, 'c.name', 'c.name_en', 'commune_name')},
 
-        -- Sá»©c chá»©a hiá»‡n táº¡i (báº£n ghi má»›i nháº¥t)
-        cap.visitor_count     AS current_visitor_count,
-        cap.capacity_pct      AS current_capacity_pct,
-        cap.recorded_at       AS capacity_recorded_at,
+        -- Sức chứa hiện tại (bản ghi mới nhất, tính lại theo max_capacity hiện tại)
+        cap.visitor_count AS current_visitor_count,
+        CASE
+          WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cap.visitor_count IS NOT NULL
+            THEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2)::numeric(5,2)
+          ELSE cap.capacity_pct
+        END AS current_capacity_pct,
+        CASE
+          WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cap.visitor_count IS NOT NULL THEN
+            CASE
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 100 THEN 'overloaded'
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 85 THEN 'near_full'
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 60 THEN 'busy'
+              ELSE 'normal'
+            END
+          ELSE cap.status
+        END::varchar(20) AS capacity_status,
+        cap.recorded_at   AS capacity_recorded_at,
 
         -- áº¢nh chÃ­nh
         (SELECT url FROM spot_media sm
@@ -409,7 +436,7 @@ class SpotRepository {
       LEFT JOIN vn_units.provinces p ON ts.province_code = p.code
       LEFT JOIN vn_units.wards c ON ts.ward_code = c.code
       LEFT JOIN LATERAL (
-        SELECT visitor_count, capacity_pct, recorded_at
+        SELECT visitor_count, capacity_pct, status, recorded_at
         FROM capacity_logs
         WHERE spot_id = ts.id
         ORDER BY recorded_at DESC
@@ -467,15 +494,29 @@ class SpotRepository {
         ${localizedSQL(lang, 'sc.name_vi', 'sc.name_en', 'category_name')},
         ${localizedSQL(lang, 'p.name', 'p.name_en', 'province_name')},
         ${localizedSQL(lang, 'cm.name', 'cm.name_en', 'commune_name')},
-        cap.visitor_count     AS current_visitor_count,
-        cap.capacity_pct      AS current_capacity_pct,
-        cap.recorded_at       AS capacity_recorded_at
+        cap.visitor_count AS current_visitor_count,
+        CASE
+          WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cap.visitor_count IS NOT NULL
+            THEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2)::numeric(5,2)
+          ELSE cap.capacity_pct
+        END AS current_capacity_pct,
+        CASE
+          WHEN ts.max_capacity IS NOT NULL AND ts.max_capacity > 0 AND cap.visitor_count IS NOT NULL THEN
+            CASE
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 100 THEN 'overloaded'
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 85 THEN 'near_full'
+              WHEN ROUND((cap.visitor_count::numeric / ts.max_capacity) * 100, 2) >= 60 THEN 'busy'
+              ELSE 'normal'
+            END
+          ELSE cap.status
+        END::varchar(20) AS capacity_status,
+        cap.recorded_at   AS capacity_recorded_at
       FROM ${this.tableName} ts
       LEFT JOIN spot_categories sc ON ts.category_id = sc.id
       LEFT JOIN vn_units.provinces p ON ts.province_code = p.code
       LEFT JOIN vn_units.wards cm ON ts.ward_code = cm.code
       LEFT JOIN LATERAL (
-        SELECT visitor_count, capacity_pct, recorded_at
+        SELECT visitor_count, capacity_pct, status, recorded_at
         FROM capacity_logs
         WHERE spot_id = ts.id
         ORDER BY recorded_at DESC
